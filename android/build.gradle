@@ -35,7 +35,7 @@ android {
         cloudTest {
             initWith debug
             applicationIdSuffix ".cloudtest"
-            versionNameSuffix '-CLOUDTEST'
+            versionNameSuffix '-INDEV-CLOUDTEST'
             manifestPlaceholders = [appName: 'Nikke Pixel Dungeon Cloud Test']
             matchingFallbacks = ['debug']
         }

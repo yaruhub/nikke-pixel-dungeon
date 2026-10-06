@@ -244,6 +244,7 @@ public class Hero extends Char {
 	// Transient context for one physical attack, never persisted in a save.
 	int rapunzelFirstAttackTarget = -1;
 	int rapunzelCounterDamage;
+	boolean rapunzelAttackInProgress;
 
 	//This list is maintained so that some logic checks can be skipped
 	// for enemies we know we aren't seeing normally, resulting in better performance
@@ -502,7 +503,10 @@ public class Hero extends Char {
 	public boolean attack(Char enemy, float dmgMulti, float dmgBonus, float accMulti) {
 		int previousTarget = rapunzelFirstAttackTarget;
 		int previousCounter = rapunzelCounterDamage;
-		RapunzelTalents.beginAttack(this, enemy);
+		boolean previousAttack = rapunzelAttackInProgress;
+		rapunzelAttackInProgress = true;
+		rapunzelFirstAttackTarget = -1;
+		rapunzelCounterDamage = 0;
 		try {
 			boolean result = super.attack(enemy, dmgMulti, dmgBonus, accMulti);
 			if (!(belongings.attackingWeapon() instanceof MissileWeapon)){
@@ -517,6 +521,7 @@ public class Hero extends Char {
 		} finally {
 			rapunzelFirstAttackTarget = previousTarget;
 			rapunzelCounterDamage = previousCounter;
+			rapunzelAttackInProgress = previousAttack;
 		}
 	}
 	@Override
@@ -1534,6 +1539,7 @@ public class Hero extends Char {
 	
 	@Override
 	public int attackProc( final Char enemy, int damage ) {
+		RapunzelTalents.beginAttackDamage(this, enemy);
 		damage = super.attackProc( enemy, damage );
 
 		KindOfWeapon wep;

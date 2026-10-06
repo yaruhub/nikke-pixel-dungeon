@@ -26,6 +26,9 @@ public final class RapunzelTalents {
     public static String migrateTalent(Hero hero, String name) {
         if (hero.heroClass != HeroClass.CLERIC) return name;
         switch (name) {
+            case "SANCTUARY_MEAL": return "SACRAMENT_VEIL";
+            case "BLESSED_MEAL": return "BLESSED_SACRAMENT";
+            case "HAND_OF_SALVATION": return "SAVING_HAND";
             case "SATIATED_SPELLS": return "SACRAMENT_VEIL";
             case "HOLY_INTUITION": return "IMPURE_CURIOSITY";
             case "SEARING_LIGHT": return "JAMMING_PULSE";
@@ -76,11 +79,11 @@ public final class RapunzelTalents {
     public static class PilgrimAttacked extends Buff {}
     public static class PilgrimSeen extends Buff {}
 
-    /** Called before the hit roll, so missing the first attack still consumes that opportunity. */
-    public static void beginAttack(Hero hero, Char enemy) {
+    /** Called only after a hit enters attackProc, including hits reduced to zero by armor. */
+    public static void beginAttackDamage(Hero hero, Char enemy) {
         hero.rapunzelFirstAttackTarget = -1;
         hero.rapunzelCounterDamage = 0;
-        if (enemy == null || !isNormalAttack(hero) || (enemy.alignment != Char.Alignment.ENEMY
+        if (!hero.rapunzelAttackInProgress || enemy == null || !isNormalAttack(hero) || (enemy.alignment != Char.Alignment.ENEMY
                 && !(enemy instanceof com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mimic))) return;
         if (hero.heroClass == HeroClass.CLERIC || hero.hasTalent(Talent.PILGRIMS_INTUITION)) {
             if (enemy.buff(PilgrimAttacked.class) == null) {

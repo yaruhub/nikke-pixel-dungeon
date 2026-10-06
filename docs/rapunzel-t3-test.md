@@ -22,10 +22,12 @@
 | 쉴드 돌진 | 사거리 4, 피해 4–8, 최대 2칸 밀치기(보스 1칸), 대기시간 10턴, 충전 소모 없음 |
 | 쉴드 돌진 +2/+3 | 충돌 추가 피해 4 / 돌진 후 보호막 5 |
 | 자비의 손길 | 아군 거리 2칸 이내, 소수 회복량은 대상별 누적·저장 |
-| 최초 공격/반격 | 첫 일반 공격 시도에 소비되므로 빗나가도 기회·스택 소비 |
+| 최초 공격/반격 | 일반 공격 적중 후 피해 처리 진입 시 소비. 빗나감·피해 처리 거부 시 보존, 방어력으로 기본 피해가 0인 적중은 소비 |
 | 음식 재사용 | 회복 남은 턴 갱신, 보호막은 획득량만큼 증가 |
 
 ## 세이브 호환
+
+- 기존 로컬 라푼젤 패치의 `SANCTUARY_MEAL` → `SACRAMENT_VEIL`, `BLESSED_MEAL` → `BLESSED_SACRAMENT`, `HAND_OF_SALVATION` → `SAVING_HAND` 이름과 투자 포인트를 이전합니다.
 
 - 이전 `PRIEST` → `PURE_GRACE`, `PALADIN` → `RAPUNZEL_PAPESS`로 복원하며 특성 포인트를 대응 슬롯으로 이전합니다. 레거시 enum 이름은 유지하여 역직렬화를 지원합니다.
 - 전직 업적은 기존 Priest/Paladin 배지와 연결합니다. 현재 선택 목록에서는 레거시 전직을 제외합니다.
@@ -39,9 +41,9 @@
 ./gradlew :android:assembleDebug --no-daemon
 ```
 
-자동 회귀 검증: **23개 시나리오, 187개 검사 통과** (`:core:rapunzelTest`).
+자동 회귀 검증: **23개 시나리오, 204개 검사 통과** (`:core:rapunzelTest`).
 
-Android 검증: 요청한 `./gradlew :android:assembleDebug --no-daemon` **성공** (1분 7초). `android/build/outputs/apk/debug/android-debug.apk` 생성 및 `apksigner verify` 통과.
+Android 검증: 요청한 `./gradlew :android:assembleDebug --no-daemon` **성공**. `android/build/outputs/apk/debug/android-debug.apk` 생성 및 `apksigner verify` 통과.
 
 자동 검증은 그래픽 문맥 없이 실제 공격/마법막대 사용/버프 틱/회복/세이브 복원 경로와 액티브 피해·밀치기 계산을 검사합니다. 렌더링과 터치 조작은 아래 플레이테스트로 별도 확인해야 합니다.
 

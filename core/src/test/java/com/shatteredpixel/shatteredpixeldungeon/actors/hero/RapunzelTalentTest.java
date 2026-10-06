@@ -184,7 +184,16 @@ public class RapunzelTalentTest {
         hero.attack(enemy); eq(10, enemy.lastDamage, "same enemy no repeat");
         TestMob missed = enemy(57); missed.evasion = Char.INFINITE_EVASION;
         check(!hero.attack(missed), "first attack misses");
-        missed.evasion = 0; hero.attack(missed); eq(10, missed.lastDamage, "miss already consumed opportunity");
+        check(missed.buff(RapunzelTalents.PilgrimAttacked.class) == null, "miss keeps first-hit opportunity");
+        missed.evasion = 0; hero.attack(missed); eq(14, missed.lastDamage, "first successful hit after miss adds four");
+        hero.attack(missed); eq(10, missed.lastDamage, "successful hit consumes opportunity exactly once");
+        TestMob blocked = enemy(58); blocked.rejectDamage = true;
+        hero.attack(blocked);
+        check(blocked.buff(RapunzelTalents.PilgrimAttacked.class) == null, "negative defenseProc preserves first-hit opportunity");
+        blocked.rejectDamage = false; blocked.armor = 100;
+        hero.attack(blocked); eq(4, blocked.lastDamage, "zero base damage still enters damage path and adds bonus");
+        check(blocked.buff(RapunzelTalents.PilgrimAttacked.class) != null, "armor-blocked hit consumes opportunity");
+        hero.attack(blocked); eq(0, blocked.lastDamage, "armor-blocked hit cannot repeat bonus");
     }
     private static void amplification() {
         rank(Talent.JAMMING_PULSE, 2); rank(Talent.JAMMER_AMPLIFICATION, 2);
@@ -273,9 +282,19 @@ public class RapunzelTalentTest {
         hero.HP = 5; hero.heal(1);
         eq(2, hero.buff(RapunzelTalents.GraceCounter.class).stacks(), "capped at two stacks");
         TestMob mob = enemy(56);
+        hero.attackProc(mob, 10);
+        eq(2, hero.buff(RapunzelTalents.GraceCounter.class).stacks(), "direct proc outside a normal attack preserves stacks");
+        check(mob.buff(RapunzelTalents.PilgrimAttacked.class) == null, "direct proc outside an attack does not mark first hit");
         hero.belongings.abilityWeapon = new Cudgel(); hero.attack(mob);
         check(hero.buff(RapunzelTalents.GraceCounter.class) != null, "ability does not consume stacks");
-        hero.belongings.abilityWeapon = null; hero.attack(mob);
+        hero.belongings.abilityWeapon = null;
+        mob.evasion = Char.INFINITE_EVASION;
+        check(!hero.attack(mob), "normal counter attack misses");
+        eq(2, hero.buff(RapunzelTalents.GraceCounter.class).stacks(), "miss retains both counter stacks");
+        mob.evasion = 0; mob.rejectDamage = true;
+        hero.attack(mob);
+        eq(2, hero.buff(RapunzelTalents.GraceCounter.class).stacks(), "negative defenseProc retains counter stacks");
+        mob.rejectDamage = false; hero.attack(mob);
         eq(22, mob.lastDamage, "two stacks each add six"); check(hero.buff(RapunzelTalents.GraceCounter.class) == null, "all consumed");
     }
     private static void mercy() {
@@ -334,7 +353,7 @@ public class RapunzelTalentTest {
     }
     private static void persistence() {
         rank(Talent.HERE_I_GO, 2); TestMob mob = enemy(56);
-        RapunzelTalents.beginAttack(hero, mob); RapunzelTalents.onEnemySeen(hero, mob);
+        hero.attack(mob); RapunzelTalents.onEnemySeen(hero, mob);
         Bundle saved = new Bundle(); mob.storeInBundle(saved); TestMob restored = new TestMob(); restored.restoreFromBundle(saved);
         check(restored.buff(RapunzelTalents.PilgrimSeen.class) != null, "saved sight marker"); check(restored.buff(RapunzelTalents.PilgrimAttacked.class) != null, "saved attack marker");
         Bundle heroBundle = new Bundle(); hero.storeInBundle(heroBundle);
@@ -355,7 +374,18 @@ public class RapunzelTalentTest {
             eq(2, restored.pointsInTalent(Talent.JAMMER_AMPLIFICATION), "T2 ranks retained");
             eq(3, restored.pointsInTalent(legacy == HeroSubClass.PRIEST ? Talent.GRACE_VEIL : Talent.VIBRATING_STAFF), "subclass T3 ranks retained");
         }
+        Bundle localPatch = new Bundle(); hero.storeInBundle(localPatch);
+        Bundle localT1 = new Bundle(); localT1.put("SANCTUARY_MEAL", 2); localPatch.put("talents_tier_1", localT1);
+        Bundle localT2 = new Bundle(); localT2.put("BLESSED_MEAL", 1); localT2.put("HAND_OF_SALVATION", 2);
+        localPatch.put("talents_tier_2", localT2);
+        TestHero localRestored = new TestHero(); Dungeon.hero = localRestored; localRestored.restoreFromBundle(localPatch);
+        eq(2, localRestored.pointsInTalent(Talent.SACRAMENT_VEIL), "local sanctuary meal rank retained");
+        eq(1, localRestored.pointsInTalent(Talent.BLESSED_SACRAMENT), "local blessed meal rank retained");
+        eq(2, localRestored.pointsInTalent(Talent.SAVING_HAND), "local salvation hand rank retained");
         hero.heroClass = HeroClass.ROGUE;
+        for (String oldName : new String[]{"SANCTUARY_MEAL", "BLESSED_MEAL", "HAND_OF_SALVATION"}) {
+            check(oldName.equals(RapunzelTalents.migrateTalent(hero, oldName)), "local aliases unchanged for other classes");
+        }
         check(RapunzelTalents.migrateTalent(hero, "SATIATED_SPELLS").equals("SATIATED_SPELLS"), "other class metamorph talent unaffected");
     }
     private static void preview() {
@@ -416,11 +446,13 @@ public class RapunzelTalentTest {
     public static class TestMob extends Mob {
         public int lastDamage;
         public int evasion;
+        public int armor;
+        public boolean rejectDamage;
         public TestMob() { HP = HT = 100; alignment = Alignment.ENEMY; }
         @Override public int defenseSkill(Char enemy) { return evasion; }
-        @Override public int defenseProc(Char enemy, int damage) { return damage; }
+        @Override public int defenseProc(Char enemy, int damage) { return rejectDamage ? -1 : damage; }
         @Override public void damage(int damage, Object source) { lastDamage = damage; HP = Math.max(1, HP - damage); }
-        @Override public int drRoll() { return 0; }
+        @Override public int drRoll() { return armor; }
     }
     public static class TestLevel extends Level {
         @Override protected boolean build() { return true; }

@@ -30,6 +30,8 @@ import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.FlavourBuff;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroSubClass;
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents;
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent;
 import com.shatteredpixel.shatteredpixeldungeon.effects.MagicMissile;
 import com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HolyTome;
 import com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand;
@@ -57,11 +59,15 @@ public class GuidingLight extends TargetedClericSpell {
 
 	@Override
 	protected void onTargetSelected(HolyTome tome, Hero hero, Integer target) {
-		if (target == null){
+		if (target == null || !tome.canCast(hero, this)){
 			return;
 		}
 
-		Ballistica aim = new Ballistica(hero.pos, target, targetingFlags());
+        Ballistica aim = new Ballistica(hero.pos, target, targetingFlags());
+        if (hero.heroClass == HeroClass.CLERIC && !validRapunzelTarget(hero, Actor.findChar(aim.collisionPos))) {
+            GLog.w(Messages.get(this, "invalid_target"));
+            return;
+        }
 
 		if (Actor.findChar( aim.collisionPos ) == hero){
 			GLog.i( Messages.get(Wand.class, "self_target") );
@@ -81,23 +87,25 @@ public class GuidingLight extends TargetedClericSpell {
 			@Override
 			public void call() {
 
-				Char ch = Actor.findChar( aim.collisionPos );
-				if (ch != null) {
-					ch.damage(Hero.heroDamageIntRange(2, 8), GuidingLight.this);
-					Sample.INSTANCE.play(Assets.Sounds.HIT_MAGIC, 1, Random.Float(0.87f, 1.15f));
-					ch.sprite.burst(0xFFFFFF44, 3);
-					if (ch.isAlive()){
-						Buff.affect(ch, Illuminated.class);
-						Buff.affect(ch, WasIlluminatedTracker.class);
-					}
-				} else {
-					Dungeon.level.pressCell(aim.collisionPos);
-				}
-
-				hero.spend( 1f );
-				hero.next();
-
-				onSpellCast(tome, hero);
+                Char ch = Actor.findChar(aim.collisionPos);
+                if (hero.heroClass == HeroClass.CLERIC) {
+                    if (!completeRapunzelHit(tome, hero, ch, Hero.heroDamageIntRange(2, 8))) {
+                        hero.spend(1f);
+                        hero.next();
+                        return;
+                    }
+                } else if (ch != null) {
+                    strike(hero, ch, Hero.heroDamageIntRange(2, 8));
+                }
+                if (ch != null) {
+                    Sample.INSTANCE.play(Assets.Sounds.HIT_MAGIC, 1, Random.Float(0.87f, 1.15f));
+                    ch.sprite.burst(0xFFFFFF44, 3);
+                } else {
+                    Dungeon.level.pressCell(aim.collisionPos);
+                }
+                hero.spend(1f);
+                hero.next();
+                if (hero.heroClass != HeroClass.CLERIC) onSpellCast(tome, hero);
 				if (hero.subClass == HeroSubClass.PRIEST && hero.buff(GuidingLightPriestCooldown.class) == null) {
 					Buff.prolong(hero, GuidingLightPriestCooldown.class, 50f);
 					ActionIndicator.refresh();
@@ -106,6 +114,38 @@ public class GuidingLight extends TargetedClericSpell {
 			}
 		});
 	}
+
+    public static boolean validRapunzelTarget(Hero hero, Char target) {
+        return target != null && target.isAlive() && target.alignment == Char.Alignment.ENEMY
+                && hero.fieldOfView[target.pos];
+    }
+
+    /** A target lost before bolt impact is a failed protocol, preserving preparation and refunds. */
+    public static boolean completeRapunzelHit(HolyTome core, Hero hero, Char target, int damage) {
+        if (hero.heroClass != HeroClass.CLERIC || !core.canCast(hero, INSTANCE) || !validRapunzelTarget(hero, target)) return false;
+        strike(hero, target, damage);
+        INSTANCE.onSpellCast(core, hero);
+        return true;
+    }
+
+    /** Shared by the rendered bolt and headless regression checks. */
+    public static void strike(Hero hero, Char target, int damage) {
+        if (hero.heroClass == HeroClass.CLERIC) {
+            damage = RapunzelTalents.jammerDamage(hero, target, damage);
+            Buff.detach(target, Illuminated.class);
+            Buff.detach(target, WasIlluminatedTracker.class);
+            target.damage(damage, INSTANCE);
+            if (target.isAlive() && target.alignment == Char.Alignment.ENEMY && hero.hasTalent(Talent.JAMMING_PULSE)) {
+                Buff.prolong(target, RapunzelTalents.Jamming.class, RapunzelTalents.pulseDuration(hero));
+            }
+        } else {
+            target.damage(damage, INSTANCE);
+            if (target.isAlive()) {
+                Buff.affect(target, Illuminated.class);
+                Buff.affect(target, WasIlluminatedTracker.class);
+            }
+        }
+    }
 
 	@Override
 	public float chargeUse(Hero hero) {
@@ -118,7 +158,7 @@ public class GuidingLight extends TargetedClericSpell {
 	}
 
 	public String desc(){
-		String desc = Messages.get(this, "desc");
+		String desc = Messages.get(this, rapunzelBasicProtocol() ? "desc_rapunzel" : "desc");
 		if (Dungeon.hero.subClass == HeroSubClass.PRIEST){
 			desc += "\n\n" + Messages.get(this, "desc_priest");
 		}
@@ -147,6 +187,9 @@ public class GuidingLight extends TargetedClericSpell {
 	}
 
 	public static class Illuminated extends Buff {
+        @Override public boolean attachTo(Char target) {
+            return (Dungeon.hero == null || Dungeon.hero.heroClass != HeroClass.CLERIC) && super.attachTo(target);
+        }
 
 		{
 			type = buffType.NEGATIVE;
@@ -177,5 +220,9 @@ public class GuidingLight extends TargetedClericSpell {
 		}
 	}
 
-	public static class WasIlluminatedTracker extends Buff {}
+	public static class WasIlluminatedTracker extends Buff {
+        @Override public boolean attachTo(Char target) {
+            return (Dungeon.hero == null || Dungeon.hero.heroClass != HeroClass.CLERIC) && super.attachTo(target);
+        }
+    }
 }

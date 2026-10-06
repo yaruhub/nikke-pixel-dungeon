@@ -822,7 +822,11 @@ public enum Talent {
 	}
 
 	public static void onArtifactUsed( Hero hero ){
-		RapunzelTalents.onArtifactUsed(hero);
+        onArtifactUsed(hero, null);
+    }
+
+    public static void onArtifactUsed(Hero hero, com.shatteredpixel.shatteredpixeldungeon.items.artifacts.Artifact source) {
+        RapunzelTalents.onArtifactUsed(hero, source);
 		if (hero.hasTalent(ENHANCED_RINGS)){
 			Buff.prolong(hero, EnhancedRings.class, 3f*hero.pointsInTalent(ENHANCED_RINGS));
 		}

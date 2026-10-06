@@ -176,7 +176,7 @@ public class AlchemistsToolkit extends Artifact {
 	public int consumeEnergy(int amount){
 		int result = amount - charge;
 		charge = Math.max(0, charge - amount);
-		Talent.onArtifactUsed(Dungeon.hero);
+		Talent.onArtifactUsed(Dungeon.hero, amount > 0 && result < amount ? AlchemistsToolkit.this : null);
 		return Math.max(0, result);
 	}
 

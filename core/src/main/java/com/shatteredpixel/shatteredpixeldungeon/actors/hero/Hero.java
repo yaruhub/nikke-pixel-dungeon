@@ -344,6 +344,10 @@ public class Hero extends Char {
 		if (heroClass == HeroClass.CLERIC) subClass = subClass.rapunzelMigration();
 		armorAbility = (ArmorAbility)bundle.get( ABILITY );
 		Talent.restoreTalentsFromBundle( bundle, this );
+        if (heroClass == HeroClass.CLERIC && buff(Talent.SatiatedSpellsTracker.class) != null) {
+            RapunzelTalents.onFoodEaten(this);
+            buff(Talent.SatiatedSpellsTracker.class).detach();
+        }
 		
 		attackSkill = bundle.getInt( ATTACK );
 		defenseSkill = bundle.getInt( DEFENSE );

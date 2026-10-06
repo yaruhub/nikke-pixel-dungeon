@@ -184,7 +184,7 @@ public class MasterThievesArmband extends Artifact {
 
 							charge--;
 							exp += 3;
-							Talent.onArtifactUsed(Dungeon.hero);
+							Talent.onArtifactUsed(Dungeon.hero, MasterThievesArmband.this);
 							while (exp >= (10 + Math.round(3.33f * level())) && level() < levelCap) {
 								exp -= 10 + Math.round(3.33f * level());
 								Catalog.countUse(MasterThievesArmband.class);
@@ -306,7 +306,7 @@ public class MasterThievesArmband extends Artifact {
 				exp += 4 * chargesUsed;
 				GLog.i(Messages.get(MasterThievesArmband.class, "stole_item", item.name()));
 
-				Talent.onArtifactUsed(Dungeon.hero);
+				Talent.onArtifactUsed(Dungeon.hero, MasterThievesArmband.this);
 				while (exp >= (10 + Math.round(3.33f * level())) && level() < levelCap) {
 					exp -= 10 + Math.round(3.33f * level());
 					Catalog.countUse(MasterThievesArmband.class);

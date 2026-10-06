@@ -51,7 +51,7 @@ public class ArtifactRecharge extends Buff {
 						if (b instanceof HornOfPlenty.hornRecharge && ignoreHornOfPlenty){
 							continue;
 						}
-						if (!((Artifact.ArtifactBuff) b).isCursed()) {
+						if (!((Artifact.ArtifactBuff) b).isCursed() && canCharge((Artifact.ArtifactBuff) b)) {
 							((Artifact.ArtifactBuff) b).charge((Hero) target, chargeAmount);
 						}
 					}
@@ -69,6 +69,8 @@ public class ArtifactRecharge extends Buff {
 		return true;
 	}
 	
+	protected boolean canCharge(Artifact.ArtifactBuff buff) { return true; }
+
 	public ArtifactRecharge set( float amount ){
 		if (left < amount) left = amount;
 		return this;

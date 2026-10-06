@@ -146,10 +146,12 @@ public class HolyTome extends Artifact {
 
 	public boolean canCast( Hero hero, ClericSpell spell ){
 		return (isEquipped(hero) || (Dungeon.hero.hasTalent(Talent.LIGHT_READING) && hero.belongings.contains(this)))
-				&& hero.buff(MagicImmune.class) == null
+				&& !cursed && hero.buff(MagicImmune.class) == null
 				&& charge >= spell.chargeUse(hero)
 				&& spell.canCast(hero);
 	}
+
+	public float availableCharge() { return charge + partialCharge; }
 
 	public void spendCharge( float chargesSpent ){
 		partialCharge -= chargesSpent;

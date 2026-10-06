@@ -26,6 +26,7 @@ import com.shatteredpixel.shatteredpixeldungeon.Dungeon;
 import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff;
 import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.FlavourBuff;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero;
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroSubClass;
 import com.shatteredpixel.shatteredpixeldungeon.effects.Enchanting;
 import com.shatteredpixel.shatteredpixeldungeon.items.Item;
@@ -51,6 +52,7 @@ public class HolyWeapon extends ClericSpell {
 
 	@Override
 	public void onCast(HolyTome tome, Hero hero) {
+        if (!tome.canCast(hero, this)) return;
 
 		Buff.affect(hero, HolyWepBuff.class, 50f);
 		Item.updateQuickslot();
@@ -65,7 +67,7 @@ public class HolyWeapon extends ClericSpell {
 
 	@Override
 	public String desc(){
-		String desc = Messages.get(this, "desc");
+		String desc = Messages.get(this, rapunzelBasicProtocol() ? "desc_rapunzel" : "desc");
 		if (Dungeon.hero.subClass == HeroSubClass.PALADIN){
 			desc += "\n\n" + Messages.get(this, "desc_paladin");
 		}
@@ -73,6 +75,9 @@ public class HolyWeapon extends ClericSpell {
 	}
 
 	public static class HolyWepBuff extends FlavourBuff {
+        @Override public String name() {
+            return Dungeon.hero != null && Dungeon.hero.heroClass == HeroClass.CLERIC ? Messages.get(HolyWeapon.INSTANCE, "name_rapunzel") : super.name();
+        }
 
 		public static final float DURATION	= 50f;
 
@@ -92,7 +97,9 @@ public class HolyWeapon extends ClericSpell {
 
 		@Override
 		public String desc() {
-			if (Dungeon.hero.subClass == HeroSubClass.PALADIN){
+			if (Dungeon.hero.heroClass == HeroClass.CLERIC) {
+                return Messages.get(this, "desc_rapunzel", dispTurns());
+            } else if (Dungeon.hero.subClass == HeroSubClass.PALADIN){
 				return Messages.get(this, "desc_paladin", dispTurns());
 			} else {
 				return Messages.get(this, "desc", dispTurns());

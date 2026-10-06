@@ -56,10 +56,9 @@ public class ShieldRush extends TargetedClericSpell {
         if (start != landing) Actor.add(new Pushing(hero, start, landing));
         hero.sprite.place(landing);
         Buff.prolong(hero, RushCooldown.class, COOLDOWN);
-        onSpellCast(tome, hero);
         Dungeon.level.occupyCell(hero);
         if (!hero.isAlive()) return;
-        if (hero.pos != landing) {
+        if (!canResolveImpact(hero, enemy, landing)) {
             hero.spendAndNext(1f);
             return;
         }
@@ -73,9 +72,14 @@ public class ShieldRush extends TargetedClericSpell {
             Dungeon.level.occupyCell(enemy);
         }
         if (rank >= 3) RapunzelTalents.giveBarrier(hero, 5);
+        onSpellCast(tome, hero);
         Dungeon.observe();
         GameScene.updateFog();
         hero.spendAndNext(1f);
+    }
+    /** Traps can redirect the hero or remove the enemy before the rush reaches its impact. */
+    public static boolean canResolveImpact(Hero hero, Char enemy, int landing) {
+        return hero.isAlive() && enemy.isAlive() && hero.pos == landing;
     }
     public static final class Knockback {
         public final int destination;

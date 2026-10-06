@@ -196,7 +196,7 @@ public class DriedRose extends Artifact {
 					}
 
 					Invisibility.dispel(hero);
-					Talent.onArtifactUsed(hero);
+					Talent.onArtifactUsed(hero, DriedRose.this);
 					charge = 0;
 					partialCharge = 0;
 					updateQuickslot();

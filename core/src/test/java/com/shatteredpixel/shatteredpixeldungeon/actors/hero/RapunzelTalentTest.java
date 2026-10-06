@@ -12,6 +12,16 @@ import com.shatteredpixel.shatteredpixeldungeon.actors.Char;
 import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Barrier;
 import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.ClericSpell;
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.GuidingLight;
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.HolyWeapon;
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.HolyWard;
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.EmergencyRepair;
+import com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HolyTome;
+import com.shatteredpixel.shatteredpixeldungeon.items.artifacts.AlchemistsToolkit;
+import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.ArtifactRecharge;
+import com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing;
+import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.MagicImmune;
+import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.EnhancedRings;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.ShieldRush;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.VibratingStaff;
 import com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob;
@@ -48,14 +58,20 @@ public class RapunzelTalentTest {
         setupFiles();
         run("class slots and unlock thresholds", RapunzelTalentTest::talentLayout);
         run("earth guardian creation is not healing", RapunzelTalentTest::guardianCreation);
-        run("food shields and exact healing ticks", RapunzelTalentTest::food);
-        run("healing potion event only", RapunzelTalentTest::potion);
+        run("shared sacrament preparation and post-protocol recovery", RapunzelTalentTest::food);
+        run("cancelled, invalid, cursed and unaffordable protocols preserve preparation", RapunzelTalentTest::failedProtocols);
+        run("target guidance guarantees jamming without legacy illumination", RapunzelTalentTest::guidance);
+        run("haste refunds first successful protocol only", RapunzelTalentTest::refunds);
+        run("prepared food, refund flags and legacy buffs survive saves", RapunzelTalentTest::protocolPersistence);
+        run("emergency repair unlock, cost, actual healing and Pure Grace synergy", RapunzelTalentTest::repair);
+        run("healing potion no longer grants Saving Hand shielding", RapunzelTalentTest::potion);
         run("curiosity speed and instant equip identification", RapunzelTalentTest::curiosity);
         run("instant wand identification on actual use", RapunzelTalentTest::wand);
         run("first normal attack, repeated targets, and misses", RapunzelTalentTest::firstAttack);
         run("pre-existing jamming versus same-hit pulse", RapunzelTalentTest::amplification);
         run("jamming probability, duration and accuracy", RapunzelTalentTest::jamming);
-        run("artifact recharge duration and amount", RapunzelTalentTest::artifacts);
+        run("source-aware artifact resonance excludes the core and never recurses", RapunzelTalentTest::artifacts);
+        run("legacy artifact talent API retains other class effects", RapunzelTalentTest::legacyArtifactEffects);
         run("first sight, shared cooldown, no deferred trigger", RapunzelTalentTest::sight);
         run("curse acquisition, no reroll, rank 3 full ID", RapunzelTalentTest::curses);
         run("actual healing, overheal and healing shield stacks", RapunzelTalentTest::grace);
@@ -126,25 +142,205 @@ public class RapunzelTalentTest {
         check(!hero.talents.get(0).containsKey(Talent.SATIATED_SPELLS), "legacy talent removed from selection");
         check(Arrays.equals(Talent.tierLevelThresholds, new int[]{0,2,7,13,21,31}), "unchanged gameplay levels");
     }
+    private static TestTome core() {
+        TestTome core = new TestTome();
+        hero.belongings.artifact = core;
+        core.activate(hero);
+        return core;
+    }
     private static void food() {
+        TestTome core = core();
         for (int r = 1; r <= 2; r++) {
             Buff.detach(hero, Barrier.class);
+            core.setCharge(3);
             rank(Talent.SACRAMENT_VEIL, r); rank(Talent.BLESSED_SACRAMENT, r);
             hero.HP = 5;
             Talent.onFoodEaten(hero, 100, null);
-            eq(1 + 2*r, hero.shielding(), "food shield");
+            eq(0, hero.shielding(), "food does not grant instant shielding");
+            eq(5, hero.HP, "food does not instantly heal");
+            check(hero.buff(RapunzelTalents.BlessedSacrament.class) == null, "food does not start healing ticks");
+            RapunzelTalents.SacramentReady ready = hero.buff(RapunzelTalents.SacramentReady.class);
+            check(ready != null, "food prepares sacrament");
+            Talent.onFoodEaten(hero, 100, null);
+            check(ready == hero.buff(RapunzelTalents.SacramentReady.class), "re-eating does not stack preparation");
+            GuidingLight.INSTANCE.onSpellCast(core, hero);
+            eq(1 + 2*r, hero.shielding(), "next successful protocol grants food shield");
+            check(hero.buff(RapunzelTalents.SacramentReady.class) == null, "shared preparation consumed once");
             RapunzelTalents.BlessedSacrament buff = hero.buff(RapunzelTalents.BlessedSacrament.class);
+            check(buff != null, "same protocol starts blessed healing");
+            eq(5, hero.HP, "first healing tick is deferred");
             for (int turn = 0; turn < 1+r; turn++) buff.act();
             eq(6 + r, hero.HP, "1 HP for exactly 2/3 turns");
             check(hero.buff(RapunzelTalents.BlessedSacrament.class) == null, "meal healing expires");
+            GuidingLight.INSTANCE.onSpellCast(core, hero);
+            eq(1 + 2*r, hero.shielding(), "another protocol cannot reuse preparation");
+            check(hero.buff(RapunzelTalents.BlessedSacrament.class) == null, "another protocol cannot restart consumed healing");
         }
+        // Either meal talent alone prepares and triggers only its own effect.
+        Buff.detach(hero, Barrier.class); rank(Talent.SACRAMENT_VEIL, 0); rank(Talent.BLESSED_SACRAMENT, 2);
+        core.setCharge(3); Talent.onFoodEaten(hero, 100, null); GuidingLight.INSTANCE.onSpellCast(core, hero);
+        eq(0, hero.shielding(), "blessed-only preparation grants no shield");
+        check(hero.buff(RapunzelTalents.BlessedSacrament.class) != null, "blessed-only preparation works");
+        Buff.detach(hero, RapunzelTalents.BlessedSacrament.class);
+        rank(Talent.SACRAMENT_VEIL, 2); rank(Talent.BLESSED_SACRAMENT, 0);
+        core.setCharge(3); Talent.onFoodEaten(hero, 100, null); GuidingLight.INSTANCE.onSpellCast(core, hero);
+        eq(5, hero.shielding(), "veil-only preparation works");
+        check(hero.buff(RapunzelTalents.BlessedSacrament.class) == null, "veil-only preparation grants no healing");
     }
     private static void potion() {
+        com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion.initColors();
         for (int r = 1; r <= 2; r++) {
             Buff.detach(hero, Barrier.class); rank(Talent.SAVING_HAND, r);
-            hero.HP = 5; hero.heal(3); eq(0, hero.shielding(), "ordinary healing is not drinking a potion");
-            RapunzelTalents.onHealingPotionDrunk(hero); eq(1 + 2*r, hero.shielding(), "potion shield");
+            hero.HP = 5;
+            new PotionOfHealing().apply(hero);
+            eq(0, hero.shielding(), "drinking a healing potion grants no Saving Hand shield");
+            check(hero.buff(RapunzelTalents.SacramentReady.class) == null, "potion does not prepare a meal");
         }
+    }
+    private static void failedProtocols() {
+        TestTome core = core();
+        rank(Talent.SACRAMENT_VEIL, 2); rank(Talent.BLESSED_SACRAMENT, 2); rank(Talent.HERE_I_GO, 2); rank(Talent.SAVING_HAND, 2);
+        Talent.onFoodEaten(hero, 100, null); RapunzelTalents.onEnemySeen(hero, enemy(56));
+        TestGuidance guidance = new TestGuidance();
+        guidance.select(core, hero, null); guidance.select(core, hero, 58);
+        core.cursed = true; HolyWard.INSTANCE.onCast(core, hero); core.cursed = false;
+        Buff.affect(hero, MagicImmune.class); EmergencyRepair.INSTANCE.onCast(core, hero); Buff.detach(hero, MagicImmune.class);
+        hero.HP = hero.HT; EmergencyRepair.INSTANCE.onCast(core, hero);
+        eq(3, core.availableCharge(), "failed protocols spend no charges");
+        core.setCharge(0); guidance.select(core, hero, 56); EmergencyRepair.INSTANCE.onCast(core, hero);
+        eq(0, core.availableCharge(), "unaffordable protocols cannot refund charges");
+        check(hero.buff(RapunzelTalents.SacramentReady.class) != null, "failures retain prepared sacrament");
+        check(hero.buff(RapunzelTalents.BlessedSacrament.class) == null, "failures do not start healing");
+        eq(0, hero.shielding(), "failures do not grant meal shields");
+        check(!hero.buff(RapunzelTalents.PilgrimHaste.class).refundUsed(), "failures retain haste refund eligibility");
+    }
+    private static void guidance() {
+        rank(Talent.JAMMER_AMPLIFICATION, 2);
+        for (int r = 1; r <= 2; r++) {
+            rank(Talent.JAMMING_PULSE, r);
+            TestMob target = enemy(56);
+            GuidingLight.strike(hero, target, 100);
+            eq(100, target.lastDamage, "new guiding jam cannot amplify same hit");
+            eq(1 + r, target.buff(RapunzelTalents.Jamming.class).cooldown(), "guidance guarantees 2/3-turn jamming");
+            check(target.buff(GuidingLight.Illuminated.class) == null, "Rapunzel guidance has no legacy illumination");
+            check(target.buff(GuidingLight.WasIlluminatedTracker.class) == null, "Rapunzel guidance has no legacy tracker");
+            check(target.buff(RapunzelTalents.PilgrimAttacked.class) == null, "guidance is not a normal attack");
+            GuidingLight.strike(hero, target, 100); eq(120, target.lastDamage, "pre-jammed guidance gets amplification");
+        }
+        rank(Talent.JAMMER_OPTIMIZATION, 1); TestMob optimized = enemy(57);
+        GuidingLight.strike(hero, optimized, 10);
+        eq(4, optimized.buff(RapunzelTalents.Jamming.class).cooldown(), "common T3 extends guaranteed jamming");
+        rank(Talent.JAMMING_PULSE, 0); TestMob untrained = enemy(58);
+        GuidingLight.strike(hero, untrained, 10);
+        check(untrained.buff(RapunzelTalents.Jamming.class) == null, "untrained guidance grants no jam");
+        check(!GuidingLight.validRapunzelTarget(hero, ally(59)), "allies are invalid guidance targets");
+        hero.heroClass = HeroClass.ROGUE;
+        TestMob legacy = enemy(60); GuidingLight.strike(hero, legacy, 10);
+        check(legacy.buff(GuidingLight.Illuminated.class) != null, "other class retains legacy illumination");
+        check(legacy.buff(GuidingLight.WasIlluminatedTracker.class) != null, "other class retains legacy tracker");
+        hero.heroClass = HeroClass.CLERIC;
+        Bundle saved = new Bundle(); legacy.storeInBundle(saved); TestMob restored = new TestMob(); restored.restoreFromBundle(saved);
+        check(restored.buff(GuidingLight.Illuminated.class) == null, "legacy saved illumination is dropped for Rapunzel");
+        check(restored.buff(GuidingLight.WasIlluminatedTracker.class) == null, "legacy saved tracker is dropped for Rapunzel");
+        GuidingLight.strike(hero, legacy, 10);
+        check(legacy.buff(GuidingLight.Illuminated.class) == null, "existing legacy illumination is cleaned on guidance hit");
+        TestTome core = core(); rank(Talent.SACRAMENT_VEIL, 2); rank(Talent.BLESSED_SACRAMENT, 2); rank(Talent.HERE_I_GO, 2);
+        rank(Talent.JAMMING_PULSE, 2);
+        Talent.onFoodEaten(hero, 100, null); TestMob hit = enemy(61); RapunzelTalents.onEnemySeen(hero, hit);
+        TestMob lost = enemy(62); lost.HP = 0;
+        check(!GuidingLight.completeRapunzelHit(core, hero, lost, 10), "target lost before impact fails protocol");
+        eq(3, core.availableCharge(), "lost target consumes no core charge");
+        check(hero.buff(RapunzelTalents.SacramentReady.class) != null, "lost target retains preparation");
+        check(!hero.buff(RapunzelTalents.PilgrimHaste.class).refundUsed(), "lost target retains refund eligibility");
+        check(GuidingLight.completeRapunzelHit(core, hero, hit, 10), "valid impact completes actual protocol");
+        eq(3, core.availableCharge(), "actual guiding impact spends and refunds one charge");
+        eq(5, hero.shielding(), "actual guiding impact triggers prepared shielding");
+        check(hero.buff(RapunzelTalents.BlessedSacrament.class) != null, "actual guiding impact starts prepared recovery");
+        check(hero.buff(RapunzelTalents.PilgrimHaste.class).refundUsed(), "actual guiding impact consumes refund eligibility");
+    }
+    private static void refunds() {
+        rank(Talent.HERE_I_GO, 2); TestTome core = core();
+        RapunzelTalents.onEnemySeen(hero, enemy(56));
+        HolyWeapon.INSTANCE.onSpellCast(core, hero); eq(2, core.availableCharge(), "cost 2 refunds exactly 1");
+        HolyWard.INSTANCE.onSpellCast(core, hero); eq(1, core.availableCharge(), "second protocol cannot refund again");
+        Buff.detach(hero, RapunzelTalents.PilgrimCooldown.class); Buff.detach(hero, RapunzelTalents.PilgrimHaste.class);
+        RapunzelTalents.onEnemySeen(hero, enemy(57)); core.setCharge(3);
+        new TestProtocol(.5f).onCast(core, hero); eq(3, core.availableCharge(), "fractional spend refunds no more than .5");
+        check(hero.buff(RapunzelTalents.PilgrimHaste.class).refundUsed(), "fractional refund uses opportunity");
+        Buff.detach(hero, RapunzelTalents.PilgrimCooldown.class); Buff.detach(hero, RapunzelTalents.PilgrimHaste.class);
+        RapunzelTalents.onEnemySeen(hero, enemy(58)); core.setCharge(3);
+        new TestProtocol(0).onCast(core, hero); eq(3, core.availableCharge(), "free protocol grants no charge");
+        check(hero.buff(RapunzelTalents.PilgrimHaste.class).refundUsed(), "first successful free protocol still uses opportunity");
+        HolyWard.INSTANCE.onSpellCast(core, hero); eq(2, core.availableCharge(), "paid protocol after first free success is not refunded");
+        Buff.detach(hero, RapunzelTalents.PilgrimHaste.class);
+        core.setCharge(3); HolyWard.INSTANCE.onSpellCast(core, hero); eq(2, core.availableCharge(), "no refund outside haste");
+        Buff.detach(hero, RapunzelTalents.PilgrimCooldown.class);
+        RapunzelTalents.onEnemySeen(hero, enemy(59)); core.setCharge(3);
+        HolyWard.INSTANCE.onSpellCast(core, hero); eq(3, core.availableCharge(), "new haste activation gets new one-time refund");
+    }
+    private static void protocolPersistence() {
+        rank(Talent.SACRAMENT_VEIL, 2); rank(Talent.BLESSED_SACRAMENT, 2); rank(Talent.HERE_I_GO, 2);
+        TestTome core = core(); Talent.onFoodEaten(hero, 100, null); RapunzelTalents.onEnemySeen(hero, enemy(56));
+        Bundle saved = new Bundle(); hero.storeInBundle(saved);
+        TestHero restored = new TestHero(); Dungeon.hero = restored; restored.restoreFromBundle(saved);
+        check(restored.buff(RapunzelTalents.SacramentReady.class) != null, "prepared meal survives save");
+        check(!restored.buff(RapunzelTalents.PilgrimHaste.class).refundUsed(), "unused refund survives save");
+        HolyTome restoredCore = restored.belongings.getItem(HolyTome.class);
+        GuidingLight.INSTANCE.onSpellCast(restoredCore, restored);
+        eq(5, restored.shielding(), "restored preparation triggers shielding");
+        eq(3, restoredCore.availableCharge(), "restored haste refunds first successful use");
+        check(restored.buff(RapunzelTalents.BlessedSacrament.class) != null, "restored preparation starts healing");
+        Bundle used = new Bundle(); restored.storeInBundle(used);
+        TestHero usedRestored = new TestHero(); Dungeon.hero = usedRestored; usedRestored.restoreFromBundle(used);
+        check(usedRestored.buff(RapunzelTalents.SacramentReady.class) == null, "consumed preparation remains consumed");
+        check(usedRestored.buff(RapunzelTalents.PilgrimHaste.class).refundUsed(), "used refund survives save");
+        HolyTome usedCore = usedRestored.belongings.getItem(HolyTome.class);
+        GuidingLight.INSTANCE.onSpellCast(usedCore, usedRestored); eq(2, usedCore.availableCharge(), "reload cannot repeat refund");
+        // Old saves have no refund flag; old Cleric's pending meal is migrated.
+        Dungeon.hero = hero;
+        Buff.detach(hero, RapunzelTalents.SacramentReady.class);
+        Buff.affect(hero, Talent.SatiatedSpellsTracker.class);
+        Bundle legacy = new Bundle(); hero.storeInBundle(legacy);
+        TestHero legacyRestored = new TestHero(); Dungeon.hero = legacyRestored; legacyRestored.restoreFromBundle(legacy);
+        check(legacyRestored.buff(RapunzelTalents.SacramentReady.class) != null, "legacy prepared meal migrated");
+        check(legacyRestored.buff(Talent.SatiatedSpellsTracker.class) == null, "legacy prepared meal tracker removed");
+        Bundle oldHaste = new Bundle(); RapunzelTalents.PilgrimHaste old = new RapunzelTalents.PilgrimHaste(); old.restoreFromBundle(oldHaste);
+        check(!old.refundUsed(), "old haste without flag defaults to unused");
+    }
+    private static void repair() {
+        TestTome core = core(); hero.lvl = 7;
+        check(!ClericSpell.getSpellList(hero, 2).contains(EmergencyRepair.INSTANCE), "untrained recovery not in T2 list");
+        for (int r = 1; r <= 2; r++) {
+            rank(Talent.SAVING_HAND, r); hero.HP = 5; core.setCharge(3);
+            check(ClericSpell.getSpellList(hero, 2).contains(EmergencyRepair.INSTANCE), "Saving Hand unlocks recovery");
+            EmergencyRepair.INSTANCE.onCast(core, hero);
+            eq(5 + (r == 1 ? 4 : 6) + hero.lvl/2, hero.HP, "recovery rank formula");
+            eq(1, core.availableCharge(), "recovery costs two charges");
+            eq(0, hero.shielding(), "Saving Hand itself does not grant shielding");
+        }
+        subclass(HeroSubClass.PURE_GRACE);
+        rank(Talent.GRACE_VEIL, 1); rank(Talent.MERCIFUL_HAND, 2); rank(Talent.GRACE_COUNTERATTACK, 3);
+        rank(Talent.SACRAMENT_VEIL, 2); rank(Talent.BLESSED_SACRAMENT, 2);
+        hero.lvl = 8; hero.HP = 5; core.setCharge(3); TestMob nearby = ally(56);
+        Talent.onFoodEaten(hero, 100, null); EmergencyRepair.INSTANCE.onCast(core, hero);
+        eq(15, hero.HP, "recovery goes through normal actual healing");
+        eq(15, nearby.HP, "actual recovery forwards 50 percent to ally");
+        eq(9, hero.shielding(), "Pure Grace veil plus prepared food shield");
+        eq(2, hero.buff(RapunzelTalents.GraceCounter.class).stacks(), "healing and shield generate two counter stacks");
+        RapunzelTalents.BlessedSacrament buff = hero.buff(RapunzelTalents.BlessedSacrament.class);
+        for (int t=0; t<3; t++) buff.act();
+        eq(18, hero.HP, "recovery triggers prepared 3-turn healing");
+        Buff.detach(hero, Barrier.class); Buff.detach(hero, RapunzelTalents.GraceCounter.class);
+        hero.HP = hero.HT-1; core.setCharge(3); EmergencyRepair.INSTANCE.onCast(core, hero);
+        eq(hero.HT, hero.HP, "recovery clamps actual healing to missing HP");
+        eq(4, hero.shielding(), "only actual healing fires Pure Grace shielding");
+        core.setCharge(3); Talent.onFoodEaten(hero, 100, null); EmergencyRepair.INSTANCE.onCast(core, hero);
+        eq(3, core.availableCharge(), "full-HP recovery spends no charge");
+        check(hero.buff(RapunzelTalents.SacramentReady.class) != null, "full-HP failure preserves preparation");
+        core.setQuickSpell(EmergencyRepair.INSTANCE);
+        Bundle saved = new Bundle(); core.storeInBundle(saved); HolyTome restored = new HolyTome(); restored.restoreFromBundle(saved);
+        Bundle after = new Bundle(); restored.storeInBundle(after);
+        check(after.getClass("quick_cls") == EmergencyRepair.class, "new recovery quick protocol survives save");
     }
     private static void guardianCreation() {
         subclass(HeroSubClass.PURE_GRACE);
@@ -223,16 +419,44 @@ public class RapunzelTalentTest {
         jam.extend(1); eq(4, jam.cooldown(), "extension adds exactly one turn");
     }
     private static void artifacts() {
-        TestArtifact artifact = new TestArtifact(); artifact.activate(hero);
+        TestTome core = core(); TestArtifact artifact = new TestArtifact(); artifact.activate(hero);
+        TestToolkit toolkit = new TestToolkit();
         for (int r = 1; r <= 2; r++) {
-            artifact.charged = 0; rank(Talent.ARTIFACT_RESONANCE, r);
-            Talent.onArtifactUsed(hero);
+            artifact.charged = 0; core.accelerated = 0; core.setCharge(3); rank(Talent.ARTIFACT_RESONANCE, r);
+            GuidingLight.INSTANCE.onSpellCast(core, hero);
+            eq(2, core.availableCharge(), "core cannot recharge itself on use");
             RapunzelTalents.ArtifactResonance buff = hero.buff(RapunzelTalents.ArtifactResonance.class);
-            eq(1 + 2*r, buff.left(), "recharge duration");
+            eq(1 + 2*r, buff.left(), "other-artifact recharge duration");
             for (int t = 0; t < 1 + 2*r; t++) buff.act();
-            eq(1 + 2*r, artifact.charged, "actual accelerated charges");
-            buff.act(); eq(1 + 2*r, artifact.charged, "no extra charge on expiration");
+            eq(1 + 2*r, artifact.charged, "other artifact receives actual accelerated charge");
+            eq(0, core.accelerated, "core excluded from resonance charge ticks");
+            eq(2, core.availableCharge(), "ticks do not recharge core");
+            buff.act(); eq(1 + 2*r, artifact.charged, "expiration grants no extra charge");
+            core.setCharge(0); Talent.onArtifactUsed(hero, artifact);
+            eq(.5f*r, core.availableCharge(), "other artifact directly grants .5/1 core charge");
+            check(hero.buff(RapunzelTalents.ArtifactResonance.class) == null, "other artifact cannot start resonance recursively");
+            core.setCharge(0); Talent.onArtifactUsed(hero);
+            eq(0, core.availableCharge(), "unknown source cannot fabricate core charge");
+            toolkit.setEnergy(1); toolkit.consumeEnergy(0); eq(0, core.availableCharge(), "zero toolkit energy consumption is not actual artifact use");
+            toolkit.setEnergy(0); toolkit.consumeEnergy(1); eq(0, core.availableCharge(), "empty toolkit consumption grants no core charge");
+            toolkit.setEnergy(1); toolkit.consumeEnergy(1); eq(.5f*r, core.availableCharge(), "real toolkit energy consumption carries source and recharges core");
+            core.setCharge(0);
+            core.cursed = true; Talent.onArtifactUsed(hero, artifact); eq(0, core.availableCharge(), "cursed core cannot be recharged"); core.cursed = false;
+            Buff.affect(hero, MagicImmune.class); Talent.onArtifactUsed(hero, artifact); eq(0, core.availableCharge(), "magic immunity blocks core recharge"); Buff.detach(hero, MagicImmune.class);
         }
+    }
+    private static void legacyArtifactEffects() {
+        hero.heroClass = HeroClass.ROGUE;
+        hero.talents.get(1).put(Talent.ENHANCED_RINGS, 2);
+        Talent.onArtifactUsed(hero);
+        eq(6, hero.buff(EnhancedRings.class).cooldown(), "old API retains Enhanced Rings");
+        Buff.detach(hero, EnhancedRings.class);
+        Talent.onArtifactUsed(hero, new TestArtifact());
+        eq(6, hero.buff(EnhancedRings.class).cooldown(), "source-aware API retains Enhanced Rings");
+        TestTome core = core(); core.setCharge(2);
+        Buff.affect(hero, ArtifactRecharge.class).set(1).act();
+        eq(1, core.accelerated, "ordinary legacy recharge still includes core");
+        eq(2.25f, core.availableCharge(), "ordinary core charge behavior remains unchanged");
     }
     private static void sight() {
         rank(Talent.HERE_I_GO, 1);
@@ -349,7 +573,19 @@ public class RapunzelTalentTest {
         Buff.prolong(target, RapunzelTalents.Jamming.class, 2);
         eq(13, ShieldRush.impactDamage(hero, target, 6, 3, true), "rank 3 overload");
         eq(3, target.buff(RapunzelTalents.Jamming.class).cooldown(), "rush extends jam");
+        rank(Talent.JAMMER_AMPLIFICATION, 1);
+        eq(143, RapunzelTalents.resonanceDamage(hero, target, 100), "Papess overload and rank 1 amplification stack");
+        rank(Talent.JAMMER_AMPLIFICATION, 2);
+        eq(156, RapunzelTalents.resonanceDamage(hero, target, 100), "Papess overload and rank 2 amplification stack");
+        rank(Talent.RESONANT_OVERLOAD, 0);
+        eq(120, ShieldRush.impactDamage(hero, target, 100, 1, false), "rush amplification works without overload investment");
+        VibratingStaff.strike(hero, target, 100, 1);
+        eq(120, target.lastDamage, "staff amplification works without overload investment");
         target.rooted = true; level.solid[57] = false; check(ShieldRush.planKnockback(target, 55).collided, "rooted target cannot be pushed");
+        check(ShieldRush.canResolveImpact(hero, target, 55), "valid rush arrival enters impact path");
+        hero.pos = 54; check(!ShieldRush.canResolveImpact(hero, target, 55), "trap-redirection prevents successful rush completion");
+        hero.pos = 55; target.HP = 0; check(!ShieldRush.canResolveImpact(hero, target, 55), "target lost to trap prevents successful rush completion");
+        target.HP = 100; hero.HP = 0; check(!ShieldRush.canResolveImpact(hero, target, 55), "hero death prevents successful rush completion");
     }
     private static void persistence() {
         rank(Talent.HERE_I_GO, 2); TestMob mob = enemy(56);
@@ -400,6 +636,19 @@ public class RapunzelTalentTest {
                 check(!talent.title().equals(Messages.NO_TEXT_FOUND), "localized talent title " + talent);
                 check(!talent.desc().equals(Messages.NO_TEXT_FOUND), "localized talent description " + talent);
             }
+            String[] expected = language == Languages.KOREAN
+                    ? new String[]{"표적 유도", "화력 지원", "방호 프로토콜", "응급 복구", "갑니다! 헉, 간다고?"}
+                    : new String[]{"Target Guidance", "Fire Support", "Defense Protocol", "Emergency Repair", "Here I Go! Wait, Really?"};
+            check(GuidingLight.INSTANCE.name().equals(expected[0]), "guidance protocol display name");
+            check(HolyWeapon.INSTANCE.name().equals(expected[1]), "fire support display name");
+            check(HolyWard.INSTANCE.name().equals(expected[2]), "defense protocol display name");
+            check(EmergencyRepair.INSTANCE.name().equals(expected[3]), "repair display name");
+            check(Talent.HERE_I_GO.title().equals(expected[4]), "haste exclamation title");
+            check(!EmergencyRepair.INSTANCE.desc().equals(Messages.NO_TEXT_FOUND), "repair description resolves");
+            check(!new RapunzelTalents.SacramentReady().desc().equals(Messages.NO_TEXT_FOUND), "preparation description resolves");
+            hero.heroClass = HeroClass.ROGUE;
+            check(GuidingLight.INSTANCE.name().equals(Messages.get(GuidingLight.INSTANCE, "name")), "other class retains legacy protocol name");
+            hero.heroClass = HeroClass.CLERIC;
             check(!VibratingStaff.INSTANCE.desc().equals(Messages.NO_TEXT_FOUND), "localized staff description");
             check(!ShieldRush.INSTANCE.desc().equals(Messages.NO_TEXT_FOUND), "localized rush description");
             check(!HeroSubClass.PURE_GRACE.desc().equals(Messages.NO_TEXT_FOUND), "localized subclass description");
@@ -458,6 +707,24 @@ public class RapunzelTalentTest {
         @Override protected boolean build() { return true; }
         @Override protected void createMobs() {}
         @Override protected void createItems() {}
+    }
+    public static class TestProtocol extends ClericSpell {
+        private final float cost;
+        public TestProtocol(float cost) { this.cost = cost; }
+        @Override public float chargeUse(Hero hero) { return cost; }
+        @Override public void onCast(HolyTome core, Hero hero) { if (core.canCast(hero, this)) onSpellCast(core, hero); }
+    }
+    public static class TestGuidance extends GuidingLight {
+        public void select(HolyTome core, Hero hero, Integer cell) { onTargetSelected(core, hero, cell); }
+    }
+    public static class TestToolkit extends AlchemistsToolkit {
+        public void setEnergy(int amount) { charge = amount; }
+    }
+    public static class TestTome extends HolyTome {
+        public float accelerated;
+        public TestTome() { exp = Integer.MIN_VALUE; }
+        public void setCharge(float amount) { charge = (int)amount; partialCharge = amount-charge; }
+        @Override public void charge(Hero hero, float amount) { accelerated += amount; super.charge(hero, amount); }
     }
     public static class TestArtifact extends Artifact {
         public float charged;

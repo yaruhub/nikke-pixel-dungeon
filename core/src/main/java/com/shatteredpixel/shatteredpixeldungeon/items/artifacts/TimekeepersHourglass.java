@@ -125,7 +125,7 @@ public class TimekeepersHourglass extends Artifact {
 									Sample.INSTANCE.play(Assets.Sounds.TELEPORT);
 
 									activeBuff = new timeStasis();
-									Talent.onArtifactUsed(Dungeon.hero);
+									Talent.onArtifactUsed(Dungeon.hero, TimekeepersHourglass.this);
 									activeBuff.attachTo(Dungeon.hero);
 								} else if (index == 1) {
 
@@ -142,7 +142,7 @@ public class TimekeepersHourglass extends Artifact {
 
 									Invisibility.dispel(Dungeon.hero);
 									activeBuff = new timeFreeze();
-									Talent.onArtifactUsed(Dungeon.hero);
+									Talent.onArtifactUsed(Dungeon.hero, TimekeepersHourglass.this);
 									activeBuff.attachTo(Dungeon.hero);
 									charge--;
 									((timeFreeze)activeBuff).processTime(0f);

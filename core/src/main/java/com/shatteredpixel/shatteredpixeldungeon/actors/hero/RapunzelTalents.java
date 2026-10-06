@@ -13,6 +13,9 @@ import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff;
 import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.FlavourBuff;
 import com.shatteredpixel.shatteredpixeldungeon.items.EquipableItem;
 import com.shatteredpixel.shatteredpixeldungeon.items.Item;
+import com.shatteredpixel.shatteredpixeldungeon.items.artifacts.Artifact;
+import com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HolyTome;
+import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.MagicImmune;
 import com.shatteredpixel.shatteredpixeldungeon.messages.Messages;
 import com.shatteredpixel.shatteredpixeldungeon.ui.BuffIndicator;
 import com.watabou.noosa.Image;
@@ -59,20 +62,47 @@ public final class RapunzelTalents {
     }
 
     public static void onFoodEaten(Hero hero) {
-        int points = hero.pointsInTalent(Talent.SACRAMENT_VEIL);
-        if (points > 0) giveBarrier(hero, 1 + 2 * points);
-        points = hero.pointsInTalent(Talent.BLESSED_SACRAMENT);
-        if (points > 0) Buff.affect(hero, BlessedSacrament.class).reset(1 + points);
+        if (hero.hasTalent(Talent.SACRAMENT_VEIL) || hero.hasTalent(Talent.BLESSED_SACRAMENT)) {
+            // One shared, persistent preparation; another meal refreshes rather than stacks it.
+            Buff.affect(hero, SacramentReady.class);
+        }
     }
 
-    public static void onHealingPotionDrunk(Hero hero) {
-        int points = hero.pointsInTalent(Talent.SAVING_HAND);
-        if (points > 0) giveBarrier(hero, 1 + 2 * points);
+    /** Only called after a protocol actually completes and its charge has been spent. */
+    public static void onCoreProtocolUsed(Hero hero, HolyTome core, float spent) {
+        SacramentReady ready = hero.buff(SacramentReady.class);
+        if (ready != null) {
+            ready.detach();
+            int points = hero.pointsInTalent(Talent.SACRAMENT_VEIL);
+            if (points > 0) giveBarrier(hero, 1 + 2 * points);
+            points = hero.pointsInTalent(Talent.BLESSED_SACRAMENT);
+            if (points > 0) Buff.affect(hero, BlessedSacrament.class).reset(1 + points);
+        }
+        PilgrimHaste haste = hero.buff(PilgrimHaste.class);
+        if (haste != null && !haste.refundUsed && hero.hasTalent(Talent.HERE_I_GO)) {
+            // The first successful protocol consumes this opportunity even if its cost is zero.
+            haste.refundUsed = true;
+            if (spent > 0) core.directCharge(Math.min(1f, spent));
+        }
     }
 
-    public static void onArtifactUsed(Hero hero) {
+    public static void onArtifactUsed(Hero hero, Artifact source) {
         int points = hero.pointsInTalent(Talent.ARTIFACT_RESONANCE);
-        if (points > 0) Buff.affect(hero, ArtifactResonance.class).set(1 + 2 * points);
+        if (points <= 0 || source == null) return;
+        if (source instanceof HolyTome) {
+            Buff.affect(hero, ArtifactResonance.class).set(1 + 2 * points);
+        } else {
+            HolyTome core = hero.belongings.getItem(HolyTome.class);
+            if (core != null && !core.cursed && hero.buff(MagicImmune.class) == null) {
+                // Direct charging is not an artifact use, so it cannot recurse.
+                core.directCharge(0.5f * points);
+            }
+        }
+    }
+
+    public static class SacramentReady extends Buff {
+        { type = buffType.POSITIVE; }
+        @Override public int icon() { return BuffIndicator.SPELL_FOOD; }
     }
 
     // Permanent markers live on the actual enemy, not on a transient visible-enemy list.
@@ -107,7 +137,7 @@ public final class RapunzelTalents {
         if (!isNormalAttack(hero) || enemy.alignment != Char.Alignment.ENEMY) return damage;
         // Snapshot jamming BEFORE rolling the new pulse: a newly jammed target gets no same-hit bonus.
         boolean wasJammed = enemy.buff(Jamming.class) != null;
-        if (wasJammed) damage = Math.round(damage * (1f + 0.1f * hero.pointsInTalent(Talent.JAMMER_AMPLIFICATION)));
+        if (wasJammed) damage = jammerDamage(hero, enemy, damage);
         if (hero.rapunzelFirstAttackTarget == enemy.id()) damage += 2 * hero.pointsInTalent(Talent.PILGRIMS_INTUITION);
         damage += hero.rapunzelCounterDamage;
         // One attackProc per attack; also safe against enchantments invoking a secondary proc.
@@ -138,7 +168,7 @@ public final class RapunzelTalents {
         Buff.affect(enemy, PilgrimSeen.class);
         int points = hero.pointsInTalent(Talent.HERE_I_GO);
         if (points > 0 && hero.buff(PilgrimCooldown.class) == null) {
-            Buff.prolong(hero, PilgrimHaste.class, 1 + points);
+            Buff.prolong(hero, PilgrimHaste.class, 1 + points).refundUsed = false;
             Buff.prolong(hero, PilgrimCooldown.class, 15);
         }
     }
@@ -207,9 +237,16 @@ public final class RapunzelTalents {
         if (hero.hasTalent(Talent.GRACE_COUNTERATTACK)) Buff.affect(hero, GraceCounter.class).addStack();
     }
 
+    /** Snapshot before the attack can apply any new jamming. */
+    public static int jammerDamage(Hero hero, Char enemy, int damage) {
+        return enemy.buff(Jamming.class) == null ? damage
+                : Math.round(damage * (1f + 0.1f * hero.pointsInTalent(Talent.JAMMER_AMPLIFICATION)));
+    }
+
     /** Only the two Papess actives call this. No pulse rolls or physical attack procs. */
     public static int resonanceDamage(Hero hero, Char enemy, int damage) {
         Jamming jam = enemy.buff(Jamming.class);
+        damage = jammerDamage(hero, enemy, damage);
         int points = hero.pointsInTalent(Talent.RESONANT_OVERLOAD);
         if (jam != null && points > 0) {
             damage = Math.round(damage * (1 + 0.1f * points));
@@ -241,13 +278,30 @@ public final class RapunzelTalents {
     }
 
     public static class PilgrimHaste extends FlavourBuff {
+        private boolean refundUsed;
+        public boolean refundUsed() { return refundUsed; }
+        @Override public String desc() {
+            return super.desc() + "\n\n" + Messages.get(this, refundUsed ? "refund_used" : "refund_ready");
+        }
+        @Override public void storeInBundle(Bundle bundle) {
+            super.storeInBundle(bundle); bundle.put("refund_used", refundUsed);
+        }
+        @Override public void restoreFromBundle(Bundle bundle) {
+            super.restoreFromBundle(bundle); refundUsed = bundle.getBoolean("refund_used");
+        }
         { type = buffType.POSITIVE; }
         @Override public int icon() { return BuffIndicator.HASTE; }
     }
     public static class PilgrimCooldown extends FlavourBuff {
         @Override public int icon() { return BuffIndicator.TIME; }
     }
-    public static class ArtifactResonance extends ArtifactRecharge {}
+    public static class ArtifactResonance extends ArtifactRecharge {
+        @Override public String iconTextDisplay() { return Integer.toString((int)Math.ceil(left())); }
+        @Override public String desc() { return Messages.get(this, "desc", dispTurns(left())); }
+        @Override protected boolean canCharge(Artifact.ArtifactBuff buff) {
+            return !(buff.artifact() instanceof HolyTome);
+        }
+    }
 
     public static class BlessedSacrament extends Buff {
         private int turns;

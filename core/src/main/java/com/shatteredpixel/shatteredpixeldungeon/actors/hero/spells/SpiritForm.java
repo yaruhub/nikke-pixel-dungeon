@@ -193,7 +193,7 @@ public class SpiritForm extends ClericSpell {
 
 	public static void applyActiveArtifactEffect(ClassArmor armor, Artifact effect){
 		if (effect instanceof AlchemistsToolkit){
-			Talent.onArtifactUsed(Dungeon.hero);
+			Talent.onArtifactUsed(Dungeon.hero, effect);
 			AlchemyScene.assignToolkit((AlchemistsToolkit) effect);
 			Game.switchScene(AlchemyScene.class);
 
@@ -211,7 +211,7 @@ public class SpiritForm extends ClericSpell {
 				w.HP = w.HT = 20 + 8*artifactLevel();
 				Buff.affect(w, Corruption.class);
 			}
-			Talent.onArtifactUsed(Dungeon.hero);
+			Talent.onArtifactUsed(Dungeon.hero, effect);
 			Dungeon.hero.spendAndNext(1f);
 
 		} else if (effect instanceof EtherealChains){

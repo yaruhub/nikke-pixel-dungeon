@@ -27,6 +27,8 @@ import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Barrier;
 import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff;
 import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Invisibility;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero;
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass;
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroSubClass;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.cleric.AscendedForm;
@@ -50,12 +52,17 @@ public abstract class ClericSpell {
 	}
 
 	public String name(){
-		return Messages.get(this, "name");
+		return Messages.get(this, rapunzelBasicProtocol() ? "name_rapunzel" : "name");
 	}
 
 	public String shortDesc(){
-		return Messages.get(this, "short_desc") + " " + Messages.get(this, "charge_cost", (int)chargeUse(Dungeon.hero));
+		return Messages.get(this, rapunzelBasicProtocol() ? "short_desc_rapunzel" : "short_desc") + " " + Messages.get(this, "charge_cost", (int)chargeUse(Dungeon.hero));
 	}
+
+    protected boolean rapunzelBasicProtocol() {
+        return Dungeon.hero != null && Dungeon.hero.heroClass == HeroClass.CLERIC
+                && (this instanceof GuidingLight || this instanceof HolyWeapon || this instanceof HolyWard);
+    }
 
 	public String desc(){
 		return Messages.get(this, "desc") + "\n\n" + Messages.get(this, "charge_cost", (int)chargeUse(Dungeon.hero));
@@ -84,8 +91,11 @@ public abstract class ClericSpell {
 			}
 			hero.buff(Talent.SatiatedSpellsTracker.class).detach();
 		}
-		tome.spendCharge(chargeUse(hero));
-		Talent.onArtifactUsed(hero);
+        float before = tome.availableCharge();
+        tome.spendCharge(chargeUse(hero));
+        float spent = Math.max(0, before - tome.availableCharge());
+        RapunzelTalents.onCoreProtocolUsed(hero, tome, spent);
+        Talent.onArtifactUsed(hero, tome);
 		if (hero.subClass == HeroSubClass.PALADIN){
 			if (this != HolyWeapon.INSTANCE && hero.buff(HolyWeapon.HolyWepBuff.class) != null){
 				hero.buff(HolyWeapon.HolyWepBuff.class).extend(10*chargeUse(hero));
@@ -119,6 +129,9 @@ public abstract class ClericSpell {
 			}
 
 		} else if (tier == 2) {
+            if (cleric.heroClass == HeroClass.CLERIC && cleric.hasTalent(Talent.SAVING_HAND)) {
+                spells.add(EmergencyRepair.INSTANCE);
+            }
 
 			if (cleric.hasTalent(Talent.RECALL_INSCRIPTION)){
 				spells.add(RecallInscription.INSTANCE);
@@ -240,6 +253,7 @@ public abstract class ClericSpell {
 		spells.add(BeamingRay.INSTANCE);
 		spells.add(LifeLinkSpell.INSTANCE);
 		spells.add(Stasis.INSTANCE);
+		spells.add(EmergencyRepair.INSTANCE);
 		spells.add(VibratingStaff.INSTANCE);
 		spells.add(ShieldRush.INSTANCE);
 		return spells;

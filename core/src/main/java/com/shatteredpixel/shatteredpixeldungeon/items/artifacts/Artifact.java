@@ -252,6 +252,8 @@ public class Artifact extends KindofMisc {
 
 	public class ArtifactBuff extends Buff {
 
+		public Artifact artifact() { return Artifact.this; }
+
 		@Override
 		public boolean attachTo( Char target ) {
 			if (super.attachTo( target )) {

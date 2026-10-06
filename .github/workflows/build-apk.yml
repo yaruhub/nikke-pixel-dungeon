@@ -3,7 +3,7 @@ name: Build APK
 on:
   workflow_dispatch:
   push:
-    branches: [master]
+    branches: [master, feature/rapunzel-t3-test]
 
 permissions:
   contents: read
@@ -28,12 +28,38 @@ jobs:
         with:
           packages: 'platform-tools'
 
-      - name: Build debug APK
-        run: bash ./gradlew :android:assembleDebug --no-daemon
+      - name: Select APK variant
+        id: variant
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == "refs/heads/master" ]]; then
+            echo "task=assembleDebug" >> "$GITHUB_OUTPUT"
+            echo "directory=debug" >> "$GITHUB_OUTPUT"
+            echo "artifact=nikke-pixel-dungeon-apk" >> "$GITHUB_OUTPUT"
+          else
+            echo "task=assembleCloudTest" >> "$GITHUB_OUTPUT"
+            echo "directory=cloudTest" >> "$GITHUB_OUTPUT"
+            echo "artifact=nikke-pixel-dungeon-cloud-test-apk" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build APK
+        env:
+          BUILD_TASK: ${{ steps.variant.outputs.task }}
+        run: bash ./gradlew ":android:$BUILD_TASK" --no-daemon
+
+      - name: Verify APK signature
+        env:
+          APK_DIRECTORY: ${{ steps.variant.outputs.directory }}
+        shell: bash
+        run: |
+          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          for apk in android/build/outputs/apk/"$APK_DIRECTORY"/*.apk; do
+            "$build_tools/apksigner" verify --verbose "$apk"
+          done
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: nikke-pixel-dungeon-apk
-          path: android/build/outputs/apk/debug/*.apk
+          name: ${{ steps.variant.outputs.artifact }}
+          path: android/build/outputs/apk/${{ steps.variant.outputs.directory }}/*.apk
           if-no-files-found: error

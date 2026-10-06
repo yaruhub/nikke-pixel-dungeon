@@ -32,6 +32,13 @@ android {
                 debugImplementation project(':services:news:debugNews')
             }
         }
+        cloudTest {
+            initWith debug
+            applicationIdSuffix ".cloudtest"
+            versionNameSuffix '-CLOUDTEST'
+            manifestPlaceholders = [appName: 'Nikke Pixel Dungeon Cloud Test']
+            matchingFallbacks = ['debug']
+        }
         release {
 
             //These lines enable R8, which is a code shrinker/optimizer/obfuscator.
@@ -56,7 +63,11 @@ android {
     }
 }
 
-configurations { natives }
+configurations {
+    natives
+    // Build-type initialization does not inherit debug's dependency configuration.
+    cloudTestImplementation.extendsFrom debugImplementation
+}
 
 dependencies {
     implementation project(':core')

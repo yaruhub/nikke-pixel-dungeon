@@ -99,6 +99,7 @@ public class AntiMagic extends Armor.Glyph {
 		RESISTS.add( GuidingLight.class );
 		RESISTS.add( HolyWeapon.class );
 		RESISTS.add( Sunray.class );
+		RESISTS.add(com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.VibratingStaff.class);
 		RESISTS.add( HolyLance.class );
 		RESISTS.add( Smite.class );
 		RESISTS.add( Judgement.class );

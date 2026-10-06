@@ -460,8 +460,8 @@ public abstract class Wand extends Item {
 			float uses = Math.min( availableUsesToID, Talent.itemIDSpeedFactor(Dungeon.hero, this) );
 			availableUsesToID -= uses;
 			usesLeftToID -= uses;
-			if (usesLeftToID <= 0 || Dungeon.hero.pointsInTalent(Talent.SCHOLARS_INTUITION) == 2) {
-				if (ShardOfOblivion.passiveIDDisabled()){
+			if (usesLeftToID <= 0 || (Dungeon.hero.pointsInTalent(Talent.SCHOLARS_INTUITION) == 2 || Dungeon.hero.pointsInTalent(Talent.IMPURE_CURIOSITY) == 2)) {
+				if (ShardOfOblivion.passiveIDDisabled() && Dungeon.hero.pointsInTalent(Talent.IMPURE_CURIOSITY) != 2){
 					if (usesLeftToID > -1){
 						GLog.p(Messages.get(ShardOfOblivion.class, "identify_ready"), name());
 					}

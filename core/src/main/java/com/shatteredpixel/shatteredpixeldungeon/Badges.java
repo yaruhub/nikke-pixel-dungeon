@@ -831,8 +831,8 @@ public class Badges {
 		thirdBossSubclassBadges.put(HeroSubClass.WARDEN, Badge.BOSS_SLAIN_3_WARDEN);
 		thirdBossSubclassBadges.put(HeroSubClass.CHAMPION, Badge.BOSS_SLAIN_3_CHAMPION);
 		thirdBossSubclassBadges.put(HeroSubClass.MONK, Badge.BOSS_SLAIN_3_MONK);
-		thirdBossSubclassBadges.put(HeroSubClass.PRIEST, Badge.BOSS_SLAIN_3_PRIEST);
-		thirdBossSubclassBadges.put(HeroSubClass.PALADIN, Badge.BOSS_SLAIN_3_PALADIN);
+		thirdBossSubclassBadges.put(HeroSubClass.PURE_GRACE, Badge.BOSS_SLAIN_3_PRIEST);
+		thirdBossSubclassBadges.put(HeroSubClass.RAPUNZEL_PAPESS, Badge.BOSS_SLAIN_3_PALADIN);
 	}
 	
 	public static void validateBossSlain() {
@@ -1375,7 +1375,7 @@ public class Badges {
 		} else if (badge == Badge.BOSS_SLAIN_3_ALL_SUBCLASSES){
 
 			for (HeroSubClass cls : HeroSubClass.values()){
-				if (cls == HeroSubClass.NONE) continue;
+				if (cls == HeroSubClass.NONE || cls == HeroSubClass.PRIEST || cls == HeroSubClass.PALADIN) continue;
 				result += "\n";
 				if (isUnlocked(thirdBossSubclassBadges.get(cls)))   result += "_" + Messages.titleCase(cls.title()) + "_";
 				else                                                result += Messages.titleCase(cls.title()) ;

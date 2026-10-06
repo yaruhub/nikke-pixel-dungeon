@@ -55,6 +55,10 @@ public class TalentsPane extends ScrollPane {
 	}
 
 	public TalentsPane( TalentButton.Mode mode, ArrayList<LinkedHashMap<Talent, Integer>> talents ) {
+		this(mode, talents, false);
+	}
+
+	public TalentsPane(TalentButton.Mode mode, ArrayList<LinkedHashMap<Talent, Integer>> talents, boolean classPreview) {
 		super(new Component());
 
 		Ratmogrify.useRatroicEnergy = Dungeon.hero != null && Dungeon.hero.armorAbility instanceof Ratmogrify;
@@ -83,6 +87,7 @@ public class TalentsPane extends ScrollPane {
 			}
 		}
 
+		tiersAvailable = previewTiers(mode, tiersAvailable, classPreview);
 		tiersAvailable = Math.min(tiersAvailable, talents.size());
 
 		for (int i = 0; i < Math.min(tiersAvailable, talents.size()); i++){
@@ -119,6 +124,10 @@ public class TalentsPane extends ScrollPane {
 		for (int i = panes.size()-1; i >= 0; i--){
 			content.bringToFront(panes.get(i));
 		}
+	}
+
+	public static int previewTiers(TalentButton.Mode mode, int tiers, boolean classPreview) {
+		return mode == TalentButton.Mode.INFO && classPreview ? Math.max(2, tiers) : tiers;
 	}
 
 	@Override

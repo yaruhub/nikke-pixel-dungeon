@@ -80,7 +80,7 @@ public class Succubus extends Mob {
 		if (enemy.buff(Charm.class) != null ){
 			int shield = (HP - HT) + (5 + damage);
 			if (shield > 0){
-				HP = HT;
+				heal(HT - HP);
 				if (shield < 5){
 					sprite.showStatusWithIcon(CharSprite.POSITIVE, Integer.toString(5-shield), FloatingText.HEALING);
 				}
@@ -88,7 +88,7 @@ public class Succubus extends Mob {
 				Buff.affect(this, Barrier.class).setShield(shield);
 				sprite.showStatusWithIcon(CharSprite.POSITIVE, Integer.toString(shield), FloatingText.SHIELDING);
 			} else {
-				HP += 5 + damage;
+				heal(5 + damage);
 				sprite.showStatusWithIcon(CharSprite.POSITIVE, "5", FloatingText.HEALING);
 			}
 			if (Dungeon.level.heroFOV[pos]) {

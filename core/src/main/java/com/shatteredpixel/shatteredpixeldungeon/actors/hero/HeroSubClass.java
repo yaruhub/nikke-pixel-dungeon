@@ -48,7 +48,15 @@ public enum HeroSubClass {
 	MONK(HeroIcon.MONK),
 
 	PRIEST(HeroIcon.PRIEST),
-	PALADIN(HeroIcon.PALADIN);
+	PALADIN(HeroIcon.PALADIN), // legacy save names, no longer selectable
+	PURE_GRACE(HeroIcon.PRIEST),
+	RAPUNZEL_PAPESS(HeroIcon.PALADIN);
+
+	public HeroSubClass rapunzelMigration() {
+		if (this == PRIEST) return PURE_GRACE;
+		if (this == PALADIN) return RAPUNZEL_PAPESS;
+		return this;
+	}
 
 	int icon;
 

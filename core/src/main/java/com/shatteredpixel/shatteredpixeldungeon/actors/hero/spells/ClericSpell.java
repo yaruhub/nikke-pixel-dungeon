@@ -138,6 +138,11 @@ public abstract class ClericSpell {
 
 		} else if (tier == 3){
 
+			if (cleric.subClass == HeroSubClass.RAPUNZEL_PAPESS) {
+				if (cleric.hasTalent(Talent.VIBRATING_STAFF)) spells.add(VibratingStaff.INSTANCE);
+				if (cleric.hasTalent(Talent.SHIELD_RUSH)) spells.add(ShieldRush.INSTANCE);
+			}
+
 			if (cleric.subClass == HeroSubClass.PRIEST) {
 				spells.add(Radiance.INSTANCE);
 
@@ -235,6 +240,8 @@ public abstract class ClericSpell {
 		spells.add(BeamingRay.INSTANCE);
 		spells.add(LifeLinkSpell.INSTANCE);
 		spells.add(Stasis.INSTANCE);
+		spells.add(VibratingStaff.INSTANCE);
+		spells.add(ShieldRush.INSTANCE);
 		return spells;
 	}
 }

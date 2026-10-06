@@ -118,7 +118,7 @@ public class BlessSpell extends TargetedClericSpell {
 					ch.sprite.showStatusWithIcon(CharSprite.POSITIVE, Integer.toString(barrier), FloatingText.SHIELDING);
 				}
 			} else {
-				ch.HP = ch.HP + totalHeal;
+				ch.heal(totalHeal);
 				ch.sprite.showStatusWithIcon( CharSprite.POSITIVE, Integer.toString(totalHeal), FloatingText.HEALING );
 			}
 		}

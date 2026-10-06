@@ -241,6 +241,9 @@ public class Hero extends Char {
 	public int HTBoost = 0;
 	
 	private ArrayList<Mob> visibleEnemies;
+	// Transient context for one physical attack, never persisted in a save.
+	int rapunzelFirstAttackTarget = -1;
+	int rapunzelCounterDamage;
 
 	//This list is maintained so that some logic checks can be skipped
 	// for enemies we know we aren't seeing normally, resulting in better performance
@@ -337,6 +340,7 @@ public class Hero extends Char {
 
 		heroClass = bundle.getEnum( CLASS, HeroClass.class );
 		subClass = bundle.getEnum( SUBCLASS, HeroSubClass.class );
+		if (heroClass == HeroClass.CLERIC) subClass = subClass.rapunzelMigration();
 		armorAbility = (ArmorAbility)bundle.get( ABILITY );
 		Talent.restoreTalentsFromBundle( bundle, this );
 		
@@ -357,6 +361,7 @@ public class Hero extends Char {
 		info.shld = bundle.getInt( Char.TAG_SHLD );
 		info.heroClass = bundle.getEnum( CLASS, HeroClass.class );
 		info.subClass = bundle.getEnum( SUBCLASS, HeroSubClass.class );
+		if (info.heroClass == HeroClass.CLERIC) info.subClass = info.subClass.rapunzelMigration();
 		Belongings.preview( info, bundle );
 	}
 
@@ -495,18 +500,25 @@ public class Hero extends Char {
 	
 	@Override
 	public boolean attack(Char enemy, float dmgMulti, float dmgBonus, float accMulti) {
-		boolean result = super.attack(enemy, dmgMulti, dmgBonus, accMulti);
-		if (!(belongings.attackingWeapon() instanceof MissileWeapon)){
-			if (buff(Talent.PreciseAssaultTracker.class) != null){
-				buff(Talent.PreciseAssaultTracker.class).detach();
-			} else if (buff(Talent.LiquidAgilACCTracker.class) != null
-						&& buff(Talent.LiquidAgilACCTracker.class).uses <= 0){
-				buff(Talent.LiquidAgilACCTracker.class).detach();
+		int previousTarget = rapunzelFirstAttackTarget;
+		int previousCounter = rapunzelCounterDamage;
+		RapunzelTalents.beginAttack(this, enemy);
+		try {
+			boolean result = super.attack(enemy, dmgMulti, dmgBonus, accMulti);
+			if (!(belongings.attackingWeapon() instanceof MissileWeapon)){
+				if (buff(Talent.PreciseAssaultTracker.class) != null){
+					buff(Talent.PreciseAssaultTracker.class).detach();
+				} else if (buff(Talent.LiquidAgilACCTracker.class) != null
+							&& buff(Talent.LiquidAgilACCTracker.class).uses <= 0){
+					buff(Talent.LiquidAgilACCTracker.class).detach();
+				}
 			}
+			return result;
+		} finally {
+			rapunzelFirstAttackTarget = previousTarget;
+			rapunzelCounterDamage = previousCounter;
 		}
-		return result;
 	}
-
 	@Override
 	public int attackSkill( Char target ) {
 		KindOfWeapon wep = belongings.attackingWeapon();
@@ -1725,6 +1737,7 @@ public class Hero extends Char {
 
 			if (fieldOfView[ m.pos ] && m.alignment == Alignment.ENEMY) {
 				visible.add(m);
+				if (!mindVisionEnemies.contains(m)) RapunzelTalents.onEnemySeen(this, m);
 				if (!visibleEnemies.contains( m )) {
 					newMob = true;
 				}

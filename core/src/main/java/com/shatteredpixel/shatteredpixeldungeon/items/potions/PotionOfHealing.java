@@ -51,6 +51,7 @@ public class PotionOfHealing extends Potion {
 	@Override
 	public void apply( Hero hero ) {
 		identify();
+		com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents.onHealingPotionDrunk(hero);
 		cure( hero );
 		heal( hero );
 	}

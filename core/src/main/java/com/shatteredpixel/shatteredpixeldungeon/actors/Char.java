@@ -657,6 +657,9 @@ public abstract class Char extends Actor {
 			// + 3%/5%
 			acuRoll *= 1.01f + 0.02f*Dungeon.hero.pointsInTalent(Talent.BLESS);
 		}
+		com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents.Jamming jam =
+				attacker.buff(com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents.Jamming.class);
+		if (jam != null) acuRoll *= jam.accuracyMultiplier();
 		acuRoll *= accMulti;
 
 		float defRoll = Random.Float( defStat );
@@ -771,6 +774,7 @@ public abstract class Char extends Actor {
 		float speed = baseSpeed;
 		if ( buff( Cripple.class ) != null ) speed /= 2f;
 		if ( buff( Stamina.class ) != null) speed *= 1.5f;
+		if (buff(com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents.PilgrimHaste.class) != null) speed *= 1.5f;
 		if ( buff( Adrenaline.class ) != null) speed *= 2f;
 		if ( buff( Haste.class ) != null) speed *= 3f;
 		if ( buff( Dread.class ) != null) speed *= 2f;
@@ -787,6 +791,15 @@ public abstract class Char extends Actor {
 		return true;
 	}
 	
+	/** All ordinary recovery goes through this entry point, excluding max-HP growth and resurrection. */
+	public int heal(int amount) {
+		if (amount <= 0 || !isAlive()) return 0;
+		int actual = Math.max(0, Math.min(amount, HT - HP));
+		HP += actual;
+		com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents.onActualHealing(this, actual, false);
+		return actual;
+	}
+
 	//used so that buffs(Shieldbuff.class) isn't called every time unnecessarily
 	private int cachedShield = 0;
 	public boolean needsShieldUpdate = true;

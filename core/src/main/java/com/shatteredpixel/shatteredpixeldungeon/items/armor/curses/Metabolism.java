@@ -54,7 +54,7 @@ public class Metabolism extends Glyph {
 					
 					hunger.affectHunger( healing * -10 );
 					
-					defender.HP += healing;
+					defender.heal(healing);
 					defender.sprite.showStatusWithIcon( CharSprite.POSITIVE, Integer.toString( healing ), FloatingText.HEALING);
 				}
 			}

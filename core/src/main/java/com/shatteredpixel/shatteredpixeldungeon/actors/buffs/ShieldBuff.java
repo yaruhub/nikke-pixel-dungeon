@@ -63,7 +63,9 @@ public abstract class ShieldBuff extends Buff {
 	}
 	
 	public void setShield( int shield ) {
+		int previous = shielding;
 		if (this.shielding <= shield) this.shielding = shield;
+		com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents.onShieldGained(target, shielding - previous);
 		if (target != null) target.needsShieldUpdate = true;
 	}
 	
@@ -73,6 +75,7 @@ public abstract class ShieldBuff extends Buff {
 
 	public void incShield( int amt ){
 		shielding += amt;
+		com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents.onShieldGained(target, amt);
 		if (target != null) target.needsShieldUpdate = true;
 	}
 

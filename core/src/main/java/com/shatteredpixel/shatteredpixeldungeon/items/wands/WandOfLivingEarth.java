@@ -391,7 +391,9 @@ public class WandOfLivingEarth extends DamageWand {
 			if (HP != 0 && sprite != null){
 				sprite.showStatusWithIcon(CharSprite.POSITIVE, Integer.toString(healthToAdd), FloatingText.HEALING);
 			}
-			HP = Math.min(HT, HP + healthToAdd);
+			// Initial summon HP is creation, not recovery of an existing ally.
+			if (HP == 0) HP = Math.min(HT, healthToAdd);
+			else heal(healthToAdd);
 			//half of hero's evasion
 			defenseSkill = (hero.lvl + 4)/2;
 		}

@@ -85,7 +85,7 @@ public class Regeneration extends Buff {
 				partialRegen += 1f / delay;
 
 				if (partialRegen >= 1) {
-					target.HP += (int)partialRegen;
+					target.heal(Math.min((int)partialRegen, regencap() - target.HP));
 					partialRegen -= (int)partialRegen;
 					if (target.HP >= regencap()) {
 						target.HP = regencap();

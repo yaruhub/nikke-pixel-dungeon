@@ -180,6 +180,14 @@ public enum Talent {
 	//Feint T4
 	FEIGNED_RETREAT(151, 4), EXPOSE_WEAKNESS(152, 4), COUNTER_ABILITY(153, 4),
 
+	//Rapunzel (the CLERIC slot). Legacy Cleric enums remain for save compatibility.
+	SACRAMENT_VEIL(160), JAMMING_PULSE(162), IMPURE_CURIOSITY(161), PILGRIMS_INTUITION(163),
+	BLESSED_SACRAMENT(164), JAMMER_AMPLIFICATION(166), ARTIFACT_RESONANCE(165),
+	SAVING_HAND(168), HERE_I_GO(167),
+	JAMMER_OPTIMIZATION(169, 3), OMINOUS_INTUITION(170, 3),
+	GRACE_VEIL(171, 3), MERCIFUL_HAND(172, 3), GRACE_COUNTERATTACK(173, 3),
+	VIBRATING_STAFF(174, 3), SHIELD_RUSH(175, 3), RESONANT_OVERLOAD(176, 3),
+
 	//Cleric T1
 	SATIATED_SPELLS(160), HOLY_INTUITION(161), SEARING_LIGHT(162), SHIELD_OF_LIGHT(163),
 	//Cleric T2
@@ -495,6 +503,14 @@ public enum Talent {
 	}
 
 	public static void onTalentUpgraded( Hero hero, Talent talent ){
+		if (talent == IMPURE_CURIOSITY && hero.pointsInTalent(talent) == 2) {
+			for (Item item : hero.belongings) {
+				if (item.isEquipped(hero) && RapunzelTalents.isEquipment(item)) item.identify();
+			}
+		}
+		if (talent == OMINOUS_INTUITION && hero.pointsInTalent(talent) >= 2) {
+			for (Item item : hero.belongings) RapunzelTalents.onItemCollected(hero, item);
+		}
 		//for metamorphosis
 		if (talent == IRON_WILL && hero.heroClass != HeroClass.WARRIOR){
 			Buff.affect(hero, BrokenSeal.WarriorShield.class);
@@ -585,11 +601,12 @@ public enum Talent {
 	public static class NatureBerriesDropped extends CounterBuff{{revivePersists = true;}};
 
 	public static void onFoodEaten( Hero hero, float foodVal, Item foodSource ){
+		RapunzelTalents.onFoodEaten(hero);
 		if (hero.hasTalent(HEARTY_MEAL)){
 			//4/6 HP healed, when hero is below 33% health (with a little rounding up)
 			if (hero.HP/(float)hero.HT < 0.334f) {
 				int healing = 2 + 2 * hero.pointsInTalent(HEARTY_MEAL);
-				hero.HP = Math.min(hero.HP + healing, hero.HT);
+				hero.heal(healing);
 				hero.sprite.showStatusWithIcon(CharSprite.POSITIVE, Integer.toString(healing), FloatingText.HEALING);
 
 			}
@@ -682,6 +699,9 @@ public enum Talent {
 
 	public static float itemIDSpeedFactor( Hero hero, Item item ){
 		float factor = 1f;
+		if (hero.hasTalent(IMPURE_CURIOSITY) && (RapunzelTalents.isEquipment(item) || item instanceof Wand)) {
+			factor *= 3f;
+		}
 
 		// Affected by both Warrior(1.75x/2.5x) and Duelist(2.5x/inst.) talents
 		if (item instanceof MeleeWeapon){
@@ -802,6 +822,7 @@ public enum Talent {
 	}
 
 	public static void onArtifactUsed( Hero hero ){
+		RapunzelTalents.onArtifactUsed(hero);
 		if (hero.hasTalent(ENHANCED_RINGS)){
 			Buff.prolong(hero, EnhancedRings.class, 3f*hero.pointsInTalent(ENHANCED_RINGS));
 		}
@@ -830,7 +851,7 @@ public enum Talent {
 	}
 
 	public static void onItemEquipped( Hero hero, Item item ){
-		boolean identify = false;
+		boolean identify = hero.pointsInTalent(IMPURE_CURIOSITY) == 2 && RapunzelTalents.isEquipment(item);
 		if (hero.pointsInTalent(VETERANS_INTUITION) == 2 && item instanceof Armor){
 			identify = true;
 		}
@@ -845,7 +866,7 @@ public enum Talent {
 		}
 
 		if (identify) {
-			if (ShardOfOblivion.passiveIDDisabled()) {
+			if (ShardOfOblivion.passiveIDDisabled() && hero.pointsInTalent(IMPURE_CURIOSITY) != 2) {
 				if (item instanceof Weapon){
 					((Weapon) item).setIDReady();
 				} else if (item instanceof Armor){
@@ -860,12 +881,14 @@ public enum Talent {
 	}
 
 	public static void onItemCollected( Hero hero, Item item ){
+		RapunzelTalents.onItemCollected(hero, item);
 		if (hero.pointsInTalent(THIEFS_INTUITION) == 2){
 			if (item instanceof Ring) ((Ring) item).setKnown();
 		}
 	}
 
 	public static int onAttackProc( Hero hero, Char enemy, int dmg ){
+		dmg = RapunzelTalents.onAttackProc(hero, enemy, dmg);
 
 		if (hero.hasTalent(Talent.PROVOKED_ANGER)
 			&& hero.buff(ProvokedAngerTracker.class) != null){
@@ -992,7 +1015,7 @@ public enum Talent {
 				Collections.addAll(tierTalents, STRENGTHENING_MEAL, ADVENTURERS_INTUITION, PATIENT_STRIKE, AGGRESSIVE_BARRIER);
 				break;
 			case CLERIC:
-				Collections.addAll(tierTalents, SATIATED_SPELLS, HOLY_INTUITION, SEARING_LIGHT, SHIELD_OF_LIGHT);
+				Collections.addAll(tierTalents, SACRAMENT_VEIL, JAMMING_PULSE, IMPURE_CURIOSITY, PILGRIMS_INTUITION);
 				break;
 		}
 		for (Talent talent : tierTalents){
@@ -1021,7 +1044,7 @@ public enum Talent {
 				Collections.addAll(tierTalents, FOCUSED_MEAL, LIQUID_AGILITY, WEAPON_RECHARGING, LETHAL_HASTE, SWIFT_EQUIP);
 				break;
 			case CLERIC:
-				Collections.addAll(tierTalents, ENLIGHTENING_MEAL, RECALL_INSCRIPTION, SUNRAY, DIVINE_SENSE, BLESS);
+				Collections.addAll(tierTalents, BLESSED_SACRAMENT, JAMMER_AMPLIFICATION, ARTIFACT_RESONANCE, SAVING_HAND, HERE_I_GO);
 				break;
 		}
 		for (Talent talent : tierTalents){
@@ -1050,7 +1073,7 @@ public enum Talent {
 				Collections.addAll(tierTalents, PRECISE_ASSAULT, DEADLY_FOLLOWUP);
 				break;
 			case CLERIC:
-				Collections.addAll(tierTalents, CLEANSE, LIGHT_READING);
+				Collections.addAll(tierTalents, JAMMER_OPTIMIZATION, OMINOUS_INTUITION);
 				break;
 		}
 		for (Talent talent : tierTalents){
@@ -1109,6 +1132,12 @@ public enum Talent {
 				break;
 			case MONK:
 				Collections.addAll(tierTalents, UNENCUMBERED_SPIRIT, MONASTIC_VIGOR, COMBINED_ENERGY);
+				break;
+			case PURE_GRACE:
+				Collections.addAll(tierTalents, GRACE_VEIL, MERCIFUL_HAND, GRACE_COUNTERATTACK);
+				break;
+			case RAPUNZEL_PAPESS:
+				Collections.addAll(tierTalents, VIBRATING_STAFF, SHIELD_RUSH, RESONANT_OVERLOAD);
 				break;
 			case PRIEST:
 				Collections.addAll(tierTalents, HOLY_LANCE, HALLOWED_GROUND, MNEMONIC_PRAYER);
@@ -1180,6 +1209,8 @@ public enum Talent {
 			Bundle replacements = bundle.getBundle("replacements");
 			for (String key : replacements.getKeys()){
 				String value = replacements.getString(key);
+				key = RapunzelTalents.migrateTalent(hero, key);
+				value = RapunzelTalents.migrateTalent(hero, value);
 				if (renamedTalents.containsKey(key)) key = renamedTalents.get(key);
 				if (renamedTalents.containsKey(value)) value = renamedTalents.get(value);
 				if (!removedTalents.contains(key) && !removedTalents.contains(value)){
@@ -1203,6 +1234,7 @@ public enum Talent {
 			if (tierBundle != null){
 				for (String tName : tierBundle.getKeys()){
 					int points = tierBundle.getInt(tName);
+					tName = RapunzelTalents.migrateTalent(hero, tName);
 					if (renamedTalents.containsKey(tName)) tName = renamedTalents.get(tName);
 					if (!removedTalents.contains(tName)) {
 						try {

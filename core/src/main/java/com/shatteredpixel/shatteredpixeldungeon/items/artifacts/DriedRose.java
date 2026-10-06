@@ -327,7 +327,7 @@ public class DriedRose extends Artifact {
 			}
 		} else if (ghost.HP < ghost.HT) {
 			int heal = Math.round((1 + level()/3f)*amount);
-			ghost.HP = Math.min( ghost.HT, ghost.HP + heal);
+			ghost.heal(heal);
 			if (ghost.sprite != null) {
 				ghost.sprite.showStatusWithIcon(CharSprite.POSITIVE, Integer.toString(heal), FloatingText.HEALING);
 			}
@@ -347,7 +347,7 @@ public class DriedRose extends Artifact {
 		
 		if (ghost != null){
 			ghost.updateRose();
-			ghost.HP = Math.min(ghost.HP+8, ghost.HT);
+			ghost.heal(8);
 		}
 
 		return super.upgrade();
@@ -419,7 +419,7 @@ public class DriedRose extends Artifact {
 					updateQuickslot();
 					
 					while (partialCharge > 1) {
-						ghost.HP++;
+						ghost.heal(1);
 						partialCharge--;
 						if (ghost.HP == ghost.HT){
 							partialCharge = 0;

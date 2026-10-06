@@ -343,7 +343,7 @@ public class ElementalBlast extends ArmorAbility {
 										} else {
 											shielding = 0;
 										}
-										mob.HP += healing;
+										mob.heal(healing);
 
 										mob.sprite.emitter().burst(Speck.factory(Speck.HEALING), 4);
 

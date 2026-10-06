@@ -257,7 +257,7 @@ public class WndHeroInfo extends WndTabbed {
 			Talent.initClassTalents(cls, talents);
 			talents.get(2).clear(); //we show T3 talents with subclasses
 
-			talentPane = new TalentsPane(TalentButton.Mode.INFO, talents);
+			talentPane = new TalentsPane(TalentButton.Mode.INFO, talents, true);
 			add(talentPane);
 		}
 

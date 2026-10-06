@@ -131,7 +131,7 @@ public class LayOnHands extends TargetedClericSpell {
 					}
 				}
 			} else {
-				ch.HP = ch.HP + totalHeal;
+				ch.heal(totalHeal);
 				ch.sprite.showStatusWithIcon( CharSprite.POSITIVE, Integer.toString(totalHeal), FloatingText.HEALING );
 			}
 		}

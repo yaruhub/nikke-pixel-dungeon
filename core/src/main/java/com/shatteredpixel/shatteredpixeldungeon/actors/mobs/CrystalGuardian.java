@@ -75,7 +75,7 @@ public class CrystalGuardian extends Mob{
 			}
 			processSwarmIntel(false);
 			throwItems();
-			HP = Math.min(HT, HP+5);
+			heal(5);
 			if (Dungeon.level.heroFOV[pos]) {
 				sprite.showStatusWithIcon(CharSprite.POSITIVE, "5", FloatingText.HEALING);
 			}

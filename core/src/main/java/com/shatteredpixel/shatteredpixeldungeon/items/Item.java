@@ -87,6 +87,7 @@ public class Item implements Bundlable {
 	
 	public boolean cursed;
 	public boolean cursedKnown;
+	public boolean rapunzelCurseChecked;
 	
 	// Unique items persist through revival
 	public boolean unique = false;
@@ -593,6 +594,7 @@ public class Item implements Bundlable {
 		bundle.put( LEVEL_KNOWN, levelKnown );
 		bundle.put( CURSED, cursed );
 		bundle.put( CURSED_KNOWN, cursedKnown );
+		bundle.put("rapunzel_curse_checked", rapunzelCurseChecked);
 		if (Dungeon.quickslot.contains(this)) {
 			bundle.put( QUICKSLOT, Dungeon.quickslot.getSlot(this) );
 		}
@@ -605,6 +607,7 @@ public class Item implements Bundlable {
 		quantity	= bundle.getInt( QUANTITY );
 		levelKnown	= bundle.getBoolean( LEVEL_KNOWN );
 		cursedKnown	= bundle.getBoolean( CURSED_KNOWN );
+		rapunzelCurseChecked = bundle.getBoolean("rapunzel_curse_checked");
 		
 		int level = bundle.getInt( LEVEL );
 		if (level > 0) {

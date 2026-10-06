@@ -327,7 +327,7 @@ public class WandOfWarding extends Wand {
 			if (tier <= 3){
 				totalZaps = (Math.max(0, totalZaps-heal));
 			} else {
-				HP = Math.min(HT, HP + heal);
+				heal(heal);
 			}
 			if (sprite != null) sprite.showStatusWithIcon(CharSprite.POSITIVE, Integer.toString(heal), FloatingText.HEALING);
 

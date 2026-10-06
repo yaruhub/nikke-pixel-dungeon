@@ -177,7 +177,7 @@ public class Necromancer extends Mob {
 				Sample.INSTANCE.play( Assets.Sounds.RAY );
 			}
 			
-			mySkeleton.HP = Math.min(mySkeleton.HP + mySkeleton.HT/5, mySkeleton.HT);
+			mySkeleton.heal(mySkeleton.HT/5);
 			if (mySkeleton.sprite.visible) {
 				mySkeleton.sprite.showStatusWithIcon( CharSprite.POSITIVE, Integer.toString( mySkeleton.HT/5 ), FloatingText.HEALING );
 			}

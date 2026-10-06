@@ -26,6 +26,7 @@ import com.shatteredpixel.shatteredpixeldungeon.actors.Char;
 import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.MagicImmune;
 import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Regeneration;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero;
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.ClericSpell;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.GuidingLight;
@@ -263,6 +264,13 @@ public class HolyTome extends Artifact {
 					quickSpell = spell;
 				}
 			}
+		}
+		if (quickSpell != null && Dungeon.hero != null && Dungeon.hero.heroClass == HeroClass.CLERIC) {
+			boolean available = false;
+			for (int tier = 1; tier <= Talent.MAX_TALENT_TIERS; tier++) {
+				available |= ClericSpell.getSpellList(Dungeon.hero, tier).contains(quickSpell);
+			}
+			if (!available) quickSpell = null;
 		}
 	}
 

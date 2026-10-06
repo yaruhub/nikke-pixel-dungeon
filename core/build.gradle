@@ -6,4 +6,13 @@ java.sourceCompatibility = java.targetCompatibility = appJavaCompatibility
 dependencies {
     api project(':SPD-classes')
     implementation project(':services')
+    testRuntimeOnly "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
+}
+
+// Headless regression checks use desktop natives for asset decoding, without a graphics context or test framework.
+tasks.register('rapunzelTest', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalentTest'
+    workingDir = rootProject.projectDir
 }

@@ -18,3 +18,8 @@ local.properties
 #intellij project files
 *.iml
 *.idea
+
+# Private Android signing keys (configure through Actions Secrets)
+*.jks
+*.keystore
+*.p12

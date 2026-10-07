@@ -1,5 +1,47 @@
 apply plugin: 'com.android.application'
 
+// CLOUD_TEST_KEYSTORE is base64 content, never a path. Actions decodes it outside
+// the checkout and supplies the temporary path with -PcloudTestKeystorePath.
+def cloudTestSecretNames = [
+    'CLOUD_TEST_KEYSTORE', 'CLOUD_TEST_STORE_PASSWORD',
+    'CLOUD_TEST_KEY_ALIAS', 'CLOUD_TEST_KEY_PASSWORD'
+]
+def cloudTestSecrets = cloudTestSecretNames.collectEntries { name ->
+    [(name): providers.environmentVariable(name).orNull]
+}
+def cloudTestKeystorePath = providers.gradleProperty('cloudTestKeystorePath').orNull
+
+def validateCloudTestSigningSecrets = tasks.register('validateCloudTestSigningSecrets') {
+    group = 'verification'
+    description = 'Requires the fixed Cloud Test signing key; never falls back to debug signing.'
+    doLast {
+        def missing = cloudTestSecretNames.findAll { !cloudTestSecrets[it]?.trim() }
+        if (!missing.isEmpty()) {
+            throw new GradleException('Cloud Test signing secrets are missing: ' + missing.join(', ')
+                    + '. Configure all four GitHub Actions repository secrets. Debug-key fallback is disabled.')
+        }
+        if (!cloudTestKeystorePath || !file(cloudTestKeystorePath).isFile()) {
+            throw new GradleException('Cloud Test keystore file is missing. Decode CLOUD_TEST_KEYSTORE into a temporary file '
+                    + 'and pass its path with -PcloudTestKeystorePath=/path/to/keystore.')
+        }
+        byte[] expected
+        try {
+            expected = Base64.decoder.decode(cloudTestSecrets.CLOUD_TEST_KEYSTORE.replaceAll('\\s', ''))
+        } catch (IllegalArgumentException ignored) {
+            throw new GradleException('CLOUD_TEST_KEYSTORE must contain valid base64-encoded keystore contents.')
+        }
+        if (expected.length == 0 || !Arrays.equals(expected, file(cloudTestKeystorePath).bytes)) {
+            throw new GradleException('The temporary Cloud Test keystore does not match CLOUD_TEST_KEYSTORE. '
+                    + 'Decode the configured secret again; no alternate signing key is allowed.')
+        }
+    }
+}
+
+// Scope validation to Cloud Test so debug/release and unrelated tasks need no secrets.
+tasks.matching { it.name in ['preCloudTestBuild', 'validateSigningCloudTest'] }.configureEach {
+    dependsOn validateCloudTestSigningSecrets
+}
+
 android {
     namespace 'com.shatteredpixel.shatteredpixeldungeon.android'
     compileSdk appAndroidCompileSDK
@@ -23,6 +65,15 @@ android {
         targetSdkVersion appAndroidTargetSDK
     }
 
+    signingConfigs {
+        cloudTest {
+            if (cloudTestKeystorePath) storeFile file(cloudTestKeystorePath)
+            storePassword cloudTestSecrets.CLOUD_TEST_STORE_PASSWORD
+            keyAlias cloudTestSecrets.CLOUD_TEST_KEY_ALIAS
+            keyPassword cloudTestSecrets.CLOUD_TEST_KEY_PASSWORD
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix ".indev"
@@ -34,6 +85,7 @@ android {
         }
         cloudTest {
             initWith debug
+            signingConfig signingConfigs.cloudTest
             applicationIdSuffix ".cloudtest"
             versionNameSuffix '-INDEV-CLOUDTEST'
             manifestPlaceholders = [appName: 'Nikke Pixel Dungeon Cloud Test']

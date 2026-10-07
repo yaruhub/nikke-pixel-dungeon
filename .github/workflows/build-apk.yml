@@ -42,10 +42,54 @@ jobs:
             echo "artifact=nikke-pixel-dungeon-cloud-test-apk" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Prepare fixed Cloud Test signing key
+        if: steps.variant.outputs.directory == 'cloudTest'
+        id: cloud_signing
+        env:
+          CLOUD_TEST_KEYSTORE: ${{ secrets.CLOUD_TEST_KEYSTORE }}
+          CLOUD_TEST_STORE_PASSWORD: ${{ secrets.CLOUD_TEST_STORE_PASSWORD }}
+          CLOUD_TEST_KEY_ALIAS: ${{ secrets.CLOUD_TEST_KEY_ALIAS }}
+          CLOUD_TEST_KEY_PASSWORD: ${{ secrets.CLOUD_TEST_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CLOUD_TEST_KEYSTORE CLOUD_TEST_STORE_PASSWORD CLOUD_TEST_KEY_ALIAS CLOUD_TEST_KEY_PASSWORD; do
+            value="${!name-}"
+            if [[ -z "${value//[[:space:]]/}" ]]; then
+              echo "::error::Missing GitHub Actions secret: $name. Configure all four Cloud Test signing secrets. Debug-key fallback is disabled."
+              exit 1
+            fi
+          done
+          umask 077
+          keystore_path="$RUNNER_TEMP/cloud-test-signing.keystore"
+          if ! printf '%s' "$CLOUD_TEST_KEYSTORE" | base64 --decode > "$keystore_path"; then
+            rm -f "$keystore_path"
+            echo "::error::CLOUD_TEST_KEYSTORE must contain valid base64-encoded keystore contents."
+            exit 1
+          fi
+          if [[ ! -s "$keystore_path" ]]; then
+            rm -f "$keystore_path"
+            echo "::error::The decoded Cloud Test keystore is empty."
+            exit 1
+          fi
+          echo "keystore_path=$keystore_path" >> "$GITHUB_OUTPUT"
+
       - name: Build APK
         env:
           BUILD_TASK: ${{ steps.variant.outputs.task }}
-        run: bash ./gradlew ":android:$BUILD_TASK" --no-daemon
+          CLOUD_TEST_KEYSTORE: ${{ secrets.CLOUD_TEST_KEYSTORE }}
+          CLOUD_TEST_STORE_PASSWORD: ${{ secrets.CLOUD_TEST_STORE_PASSWORD }}
+          CLOUD_TEST_KEY_ALIAS: ${{ secrets.CLOUD_TEST_KEY_ALIAS }}
+          CLOUD_TEST_KEY_PASSWORD: ${{ secrets.CLOUD_TEST_KEY_PASSWORD }}
+          CLOUD_TEST_KEYSTORE_PATH: ${{ steps.cloud_signing.outputs.keystore_path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          signing_args=()
+          if [[ "$BUILD_TASK" == 'assembleCloudTest' ]]; then
+            signing_args+=("-PcloudTestKeystorePath=$CLOUD_TEST_KEYSTORE_PATH")
+          fi
+          bash ./gradlew ":android:$BUILD_TASK" "${signing_args[@]}" --no-daemon
 
       - name: Verify APK signature
         env:
@@ -54,7 +98,7 @@ jobs:
         run: |
           build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           for apk in android/build/outputs/apk/"$APK_DIRECTORY"/*.apk; do
-            "$build_tools/apksigner" verify --verbose "$apk"
+            "$build_tools/apksigner" verify --verbose --print-certs "$apk"
           done
 
       - name: Upload APK
@@ -63,3 +107,8 @@ jobs:
           name: ${{ steps.variant.outputs.artifact }}
           path: android/build/outputs/apk/${{ steps.variant.outputs.directory }}/*.apk
           if-no-files-found: error
+
+      - name: Remove temporary Cloud Test signing key
+        if: always() && steps.variant.outputs.directory == 'cloudTest'
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/cloud-test-signing.keystore"

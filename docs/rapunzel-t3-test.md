@@ -72,7 +72,7 @@ apksigner verify --verbose android/build/outputs/apk/cloudTest/android-cloudTest
 
 회귀 테스트: **49개 시나리오, 598개 검사**. 기존 29개 시나리오를 새 음식·스택 규칙에 맞게 갱신하고 직접 마법·다중 패킷·무제한 스택 저장·실제 STR 출력·인챈트/상형문자 유지·신규 4티어·면역·메아리·예비 충전·이전·한국어/영어 설명을 검사합니다.
 
-APK: `android/build/outputs/apk/cloudTest/android-cloudTest.apk`. `.cloudtest` ID와 `-INDEV-CLOUDTEST` 버전명, 별도 Cloud Test 이름을 유지합니다. release/debug와 workflow 설정은 이번 패치에서 변경하지 않습니다.
+APK: `android/build/outputs/apk/cloudTest/android-cloudTest.apk`. `.cloudtest` ID와 `-INDEV-CLOUDTEST` 버전명, 별도 Cloud Test 이름을 유지합니다. release/debug 서명은 그대로 유지합니다. Cloud Test는 고정 서명 Secret 설정이 필요합니다: [설정 절차](cloud-test-signing.md).
 
 ## 플레이테스트
 

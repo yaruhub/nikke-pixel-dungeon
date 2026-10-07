@@ -97,6 +97,8 @@ public class AntiMagic extends Armor.Glyph {
 		RESISTS.add( HolyDart.class );
 
 		RESISTS.add( GuidingLight.class );
+        RESISTS.add(com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.class);
+        RESISTS.add(com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.Collision.class);
 		RESISTS.add( HolyWeapon.class );
 		RESISTS.add( Sunray.class );
 		RESISTS.add(com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.VibratingStaff.class);

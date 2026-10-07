@@ -21,6 +21,9 @@
 
 package com.shatteredpixel.shatteredpixeldungeon.items.artifacts;
 
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass;
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents;
+
 import com.shatteredpixel.shatteredpixeldungeon.Assets;
 import com.shatteredpixel.shatteredpixeldungeon.Badges;
 import com.shatteredpixel.shatteredpixeldungeon.Dungeon;
@@ -132,7 +135,7 @@ public class ChaliceOfBlood extends Artifact {
 		}
 
 		if (hero.buff(MagicImmune.class) != null && hero.buff(HolyWard.HolyArmBuff.class) != null){
-			damage -= hero.subClass == HeroSubClass.PALADIN ? 3 : 1;
+			damage = Math.max(0, damage - (hero.heroClass == HeroClass.CLERIC ? RapunzelTalents.wardReduction(hero) : hero.subClass == HeroSubClass.PALADIN ? 3 : 1));
 		}
 
 		WandOfLivingEarth.RockArmor rockArmor = hero.buff(WandOfLivingEarth.RockArmor.class);

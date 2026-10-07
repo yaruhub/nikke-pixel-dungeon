@@ -56,7 +56,7 @@ public abstract class ClericSpell {
 	}
 
 	public String shortDesc(){
-		return Messages.get(this, rapunzelBasicProtocol() ? "short_desc_rapunzel" : "short_desc") + " " + Messages.get(this, "charge_cost", (int)chargeUse(Dungeon.hero));
+		return Messages.get(this, rapunzelBasicProtocol() ? "short_desc_rapunzel" : "short_desc") + " " + Messages.get(this, "charge_cost", RapunzelTalents.protocolCost(Dungeon.hero, chargeUse(Dungeon.hero)));
 	}
 
     protected boolean rapunzelBasicProtocol() {
@@ -65,7 +65,7 @@ public abstract class ClericSpell {
     }
 
 	public String desc(){
-		return Messages.get(this, "desc") + "\n\n" + Messages.get(this, "charge_cost", (int)chargeUse(Dungeon.hero));
+		return Messages.get(this, "desc") + "\n\n" + Messages.get(this, "charge_cost", RapunzelTalents.protocolCost(Dungeon.hero, chargeUse(Dungeon.hero)));
 	}
 
 	public boolean usesTargeting(){
@@ -91,9 +91,13 @@ public abstract class ClericSpell {
 			}
 			hero.buff(Talent.SatiatedSpellsTracker.class).detach();
 		}
-        float before = tome.availableCharge();
-        tome.spendCharge(chargeUse(hero));
-        float spent = Math.max(0, before - tome.availableCharge());
+
+        float cost = tome.protocolCost(hero, this);
+        RapunzelTalents.CoreOverdriveState od = hero.buff(RapunzelTalents.CoreOverdriveState.class);
+        float covered = od == null ? 0f : Math.min(od.reserve, cost);
+        if (od != null) od.reserve -= covered;
+        tome.spendCharge(cost - covered);
+        float spent = cost - covered;
         RapunzelTalents.onCoreProtocolUsed(hero, tome, spent);
         Talent.onArtifactUsed(hero, tome);
 		if (hero.subClass == HeroSubClass.PALADIN){

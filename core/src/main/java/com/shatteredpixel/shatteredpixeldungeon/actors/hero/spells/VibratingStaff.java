@@ -64,13 +64,13 @@ public class VibratingStaff extends TargetedClericSpell {
     /** Damage-only half of the cast, also exercised without a graphics context. */
     public static void strike(Hero hero, Char target, int damage, int rank) {
         int center = target.pos;
-        target.damage(RapunzelTalents.resonanceDamage(hero, target, damage), INSTANCE);
+        RapunzelTalents.magicDamage(hero, target, RapunzelTalents.resonanceDamage(hero, target, damage), INSTANCE, false);
         if (rank >= 3) {
             for (Char enemy : Dungeon.level.mobs.toArray(new Char[0])) {
                 if (enemy != target && enemy.isAlive() && enemy.alignment == Char.Alignment.ENEMY
                         && Dungeon.level.distance(center, enemy.pos) <= 2
                         && new Ballistica(center, enemy.pos, Ballistica.STOP_SOLID | Ballistica.STOP_TARGET).collisionPos == enemy.pos) {
-                    enemy.damage(RapunzelTalents.resonanceDamage(hero, enemy, Math.round(damage * 0.5f)), INSTANCE);
+                    RapunzelTalents.magicDamage(hero, enemy, RapunzelTalents.resonanceDamage(hero, enemy, Math.round(damage * 0.5f)), INSTANCE, false);
                 }
             }
         }

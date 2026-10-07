@@ -21,6 +21,8 @@
 
 package com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells;
 
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents;
+
 import com.shatteredpixel.shatteredpixeldungeon.Assets;
 import com.shatteredpixel.shatteredpixeldungeon.Dungeon;
 import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff;
@@ -49,24 +51,30 @@ public class HolyWard extends ClericSpell {
 	public void onCast(HolyTome tome, Hero hero) {
         if (!tome.canCast(hero, this)) return;
 
-		Buff.affect(hero, HolyArmBuff.class, 50f);
+        applyWard(tome, hero);
+
+        Sample.INSTANCE.play(Assets.Sounds.READ);
+        hero.sprite.operate(hero.pos);
+        if (hero.belongings.armor() != null) Enchanting.show(hero, hero.belongings.armor());
+        onSpellCast(tome, hero);
+    }
+    public static void applyWard(HolyTome tome, Hero hero) {
+        if (hero.heroClass == HeroClass.CLERIC) Buff.prolong(hero, HolyArmBuff.class, 50f);
+        else Buff.affect(hero, HolyArmBuff.class, 50f);
+        if (hero.heroClass == HeroClass.CLERIC && hero.subClass == HeroSubClass.PURE_GRACE)
+            RapunzelTalents.giveBarrier(hero,
+                RapunzelTalents.coreOutput(hero, tome) / 2);
 		Item.updateQuickslot();
 
-		Sample.INSTANCE.play(Assets.Sounds.READ);
-
-		hero.sprite.operate(hero.pos);
-		if (hero.belongings.armor() != null) Enchanting.show(hero, hero.belongings.armor());
-
-		onSpellCast(tome, hero);
 	}
 
 	@Override
 	public String desc(){
-		String desc = Messages.get(this, rapunzelBasicProtocol() ? "desc_rapunzel" : "desc");
+		String desc = rapunzelBasicProtocol() ? Messages.get(this, "desc_rapunzel", RapunzelTalents.wardReduction(Dungeon.hero), RapunzelTalents.coreOutput(Dungeon.hero)/2) : Messages.get(this, "desc");
 		if (Dungeon.hero.subClass == HeroSubClass.PALADIN){
 			desc += "\n\n" + Messages.get(this, "desc_paladin");
 		}
-		return desc + "\n\n" + Messages.get(this, "charge_cost", (int)chargeUse(Dungeon.hero));
+		return desc + "\n\n" + Messages.get(this, "charge_cost", RapunzelTalents.protocolCost(Dungeon.hero, chargeUse(Dungeon.hero)));
 	}
 
 	public static class HolyArmBuff extends FlavourBuff {

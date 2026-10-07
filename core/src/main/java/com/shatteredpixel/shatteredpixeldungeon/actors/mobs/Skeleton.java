@@ -21,6 +21,8 @@
 
 package com.shatteredpixel.shatteredpixeldungeon.actors.mobs;
 
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents;
+
 import com.shatteredpixel.shatteredpixeldungeon.Assets;
 import com.shatteredpixel.shatteredpixeldungeon.Dungeon;
 import com.shatteredpixel.shatteredpixeldungeon.actors.Char;
@@ -117,7 +119,7 @@ public class Skeleton extends Mob {
 
 					if (ch.buff(HolyWard.HolyArmBuff.class) != null){
 						//doubled
-						damage -= Dungeon.hero.subClass == HeroSubClass.PALADIN ? 6 : 2;
+						damage -= Dungeon.hero.heroClass == HeroClass.CLERIC ? 2 * RapunzelTalents.wardReduction(Dungeon.hero) : Dungeon.hero.subClass == HeroSubClass.PALADIN ? 6 : 2;
 					}
 				}
 

@@ -21,6 +21,9 @@
 
 package com.shatteredpixel.shatteredpixeldungeon.items.weapon;
 
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass;
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents;
+
 import com.shatteredpixel.shatteredpixeldungeon.Badges;
 import com.shatteredpixel.shatteredpixeldungeon.Dungeon;
 import com.shatteredpixel.shatteredpixeldungeon.Statistics;
@@ -150,15 +153,15 @@ abstract public class Weapon extends KindOfWeapon {
 			if (attacker instanceof Hero && isEquipped((Hero) attacker)
 					&& attacker.buff(HolyWeapon.HolyWepBuff.class) != null){
 				if (enchantment != null &&
-						(((Hero) attacker).subClass == HeroSubClass.PALADIN || hasCurseEnchant())){
+						(((Hero) attacker).heroClass == HeroClass.CLERIC || ((Hero) attacker).subClass == HeroSubClass.PALADIN || hasCurseEnchant())){
 					damage = enchantment.proc(this, attacker, defender, damage);
 				}
 				if (defender.isAlive() && trinityEnchant != null){
 					damage = trinityEnchant.proc(this, attacker, defender, damage);
 				}
 				if (defender.isAlive()) {
-					int dmg = ((Hero) attacker).subClass == HeroSubClass.PALADIN ? 6 : 2;
-					defender.damage(Math.round(dmg * Enchantment.genericProcChanceMultiplier(attacker)), HolyWeapon.INSTANCE);
+					int dmg = ((Hero) attacker).heroClass == HeroClass.CLERIC ? RapunzelTalents.fireSupport((Hero)attacker) : ((Hero) attacker).subClass == HeroSubClass.PALADIN ? 6 : 2;
+					defender.damage(((Hero)attacker).heroClass == HeroClass.CLERIC ? dmg : Math.round(dmg * Enchantment.genericProcChanceMultiplier(attacker)), HolyWeapon.INSTANCE);
 				}
 
 			} else {
@@ -409,7 +412,7 @@ abstract public class Weapon extends KindOfWeapon {
 	
 	@Override
 	public String name() {
-		if (isEquipped(Dungeon.hero) && !hasCurseEnchant() && Dungeon.hero.buff(HolyWeapon.HolyWepBuff.class) != null
+		if (isEquipped(Dungeon.hero) && !hasCurseEnchant() && Dungeon.hero.heroClass != HeroClass.CLERIC && Dungeon.hero.buff(HolyWeapon.HolyWepBuff.class) != null
 			&& (Dungeon.hero.subClass != HeroSubClass.PALADIN || enchantment == null)){
 				return Messages.get(HolyWeapon.class, "ench_name", super.name());
 			} else {
@@ -478,7 +481,7 @@ abstract public class Weapon extends KindOfWeapon {
 				&& !enchantment.curse()
 				&& owner instanceof Hero
 				&& isEquipped((Hero) owner)
-				&& owner.buff(HolyWeapon.HolyWepBuff.class) != null
+				&& ((Hero)owner).heroClass != HeroClass.CLERIC && owner.buff(HolyWeapon.HolyWepBuff.class) != null
 				&& ((Hero) owner).subClass != HeroSubClass.PALADIN) {
 			return false;
 		} else if (owner.buff(BodyForm.BodyFormBuff.class) != null
@@ -505,7 +508,7 @@ abstract public class Weapon extends KindOfWeapon {
 
 	@Override
 	public ItemSprite.Glowing glowing() {
-		if (isEquipped(Dungeon.hero) && !hasCurseEnchant() && Dungeon.hero.buff(HolyWeapon.HolyWepBuff.class) != null
+		if (isEquipped(Dungeon.hero) && !hasCurseEnchant() && Dungeon.hero.heroClass != HeroClass.CLERIC && Dungeon.hero.buff(HolyWeapon.HolyWepBuff.class) != null
 				&& (Dungeon.hero.subClass != HeroSubClass.PALADIN || enchantment == null)){
 			return HOLY;
 		} else {

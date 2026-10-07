@@ -64,7 +64,7 @@ public class ShieldRush extends TargetedClericSpell {
         }
         Knockback push = planKnockback(enemy, landing);
         int damage = impactDamage(hero, enemy, Hero.heroDamageIntRange(4, 8), rank, push.collided);
-        enemy.damage(damage, this);
+        RapunzelTalents.directDamage(hero, enemy, damage, this, false, false);
         if (enemy.isAlive() && push.destination != enemy.pos) {
             int oldPos = enemy.pos;
             enemy.pos = push.destination;

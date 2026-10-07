@@ -21,6 +21,8 @@
 
 package com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells;
 
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents;
+
 import com.shatteredpixel.shatteredpixeldungeon.Assets;
 import com.shatteredpixel.shatteredpixeldungeon.Dungeon;
 import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff;
@@ -67,11 +69,11 @@ public class HolyWeapon extends ClericSpell {
 
 	@Override
 	public String desc(){
-		String desc = Messages.get(this, rapunzelBasicProtocol() ? "desc_rapunzel" : "desc");
+		String desc = rapunzelBasicProtocol() ? Messages.get(this, "desc_rapunzel", RapunzelTalents.fireSupport(Dungeon.hero)) : Messages.get(this, "desc");
 		if (Dungeon.hero.subClass == HeroSubClass.PALADIN){
 			desc += "\n\n" + Messages.get(this, "desc_paladin");
 		}
-		return desc + "\n\n" + Messages.get(this, "charge_cost", (int)chargeUse(Dungeon.hero));
+		return desc + "\n\n" + Messages.get(this, "charge_cost", RapunzelTalents.protocolCost(Dungeon.hero, chargeUse(Dungeon.hero)));
 	}
 
 	public static class HolyWepBuff extends FlavourBuff {

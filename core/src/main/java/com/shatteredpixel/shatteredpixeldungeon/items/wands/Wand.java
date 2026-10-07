@@ -21,6 +21,8 @@
 
 package com.shatteredpixel.shatteredpixeldungeon.items.wands;
 
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents;
+
 import com.shatteredpixel.shatteredpixeldungeon.Assets;
 import com.shatteredpixel.shatteredpixeldungeon.Badges;
 import com.shatteredpixel.shatteredpixeldungeon.Dungeon;
@@ -766,7 +768,9 @@ public abstract class Wand extends Item {
 					} else {
 						curWand.fx(shot, new Callback() {
 							public void call() {
-								curWand.onZap(shot);
+								try (RapunzelTalents.DirectAttack event =
+                                        RapunzelTalents.directAttack(curUser, true)) {
+                                    curWand.onZap(shot);
 								if (Random.Float() < WondrousResin.extraCurseEffectChance()){
 									WondrousResin.forcePositive = true;
 									CursedWand.cursedZap(curWand,
@@ -781,6 +785,7 @@ public abstract class Wand extends Item {
 								} else {
 									curWand.wandUsed();
 								}
+                                }
 							}
 						});
 

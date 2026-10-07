@@ -58,11 +58,11 @@ public class RapunzelTalentTest {
         setupFiles();
         run("class slots and unlock thresholds", RapunzelTalentTest::talentLayout);
         run("earth guardian creation is not healing", RapunzelTalentTest::guardianCreation);
-        run("shared sacrament preparation and post-protocol recovery", RapunzelTalentTest::food);
-        run("cancelled, invalid, cursed and unaffordable protocols preserve preparation", RapunzelTalentTest::failedProtocols);
+        run("immediate food shielding and recovery", RapunzelTalentTest::food);
+        run("failed protocols preserve charges and haste eligibility", RapunzelTalentTest::failedProtocols);
         run("target guidance guarantees jamming without legacy illumination", RapunzelTalentTest::guidance);
         run("haste refunds first successful protocol only", RapunzelTalentTest::refunds);
-        run("prepared food, refund flags and legacy buffs survive saves", RapunzelTalentTest::protocolPersistence);
+        run("food recovery, refund flags and legacy marker compatibility", RapunzelTalentTest::protocolPersistence);
         run("emergency repair unlock, cost, actual healing and Pure Grace synergy", RapunzelTalentTest::repair);
         run("healing potion no longer grants Saving Hand shielding", RapunzelTalentTest::potion);
         run("curiosity speed and instant equip identification", RapunzelTalentTest::curiosity);
@@ -85,6 +85,26 @@ public class RapunzelTalentTest {
         run("legacy Cleric talent and subclass migration", RapunzelTalentTest::migration);
         run("preview tiers do not change gameplay unlocks", RapunzelTalentTest::preview);
         run("English and Korean descriptions resolve", RapunzelTalentTest::messages);
+        run("directMagic", RapunzelTalentTest::directMagic);
+        run("packetDedup", RapunzelTalentTest::packetDedup);
+        run("unlimitedCounter", RapunzelTalentTest::unlimitedCounter);
+        run("output", RapunzelTalentTest::output);
+        run("equipment", RapunzelTalentTest::equipment);
+        run("prayer", RapunzelTalentTest::prayer);
+        run("purification", RapunzelTalentTest::purification);
+        run("echo", RapunzelTalentTest::echo);
+        run("descent", RapunzelTalentTest::descent);
+        run("rampage", RapunzelTalentTest::rampage);
+        run("overdrive", RapunzelTalentTest::overdrive);
+        run("chain", RapunzelTalentTest::chain);
+        run("miracle", RapunzelTalentTest::miracle);
+        run("fourthMigration", RapunzelTalentTest::fourthMigration);
+        run("wardGrace", RapunzelTalentTest::wardGrace);
+        run("naturalCharging", RapunzelTalentTest::naturalCharging);
+        run("collision", RapunzelTalentTest::collision);
+        run("jamImmunity", RapunzelTalentTest::jamImmunity);
+        run("prayerGrace", RapunzelTalentTest::prayerGrace);
+        run("fourthMessages", RapunzelTalentTest::fourthMessages);
         System.out.println("PASS: " + cases + " cases, " + assertions + " assertions");
     }
 
@@ -98,10 +118,14 @@ public class RapunzelTalentTest {
         Dungeon.hero = hero;
         level = new TestLevel();
         level.mobs = new java.util.HashSet<>();
+        level.heaps = new com.watabou.utils.SparseArray<>();
         level.setSize(12, 12);
         Arrays.fill(level.map, Terrain.EMPTY);
         Arrays.fill(level.passable, true);
         Arrays.fill(level.openSpace, true);
+        for(int cell=0;cell<level.length();cell++) if(cell/level.width()==0 || cell/level.width()==level.height()-1 || cell%level.width()==0 || cell%level.width()==level.width()-1) {
+            level.map[cell]=Terrain.WALL; level.solid[cell]=true; level.losBlocking[cell]=true; level.passable[cell]=false;
+        }
         hero.fieldOfView = new boolean[level.length()];
         Arrays.fill(hero.fieldOfView, true);
         Dungeon.level = level;
@@ -150,42 +174,23 @@ public class RapunzelTalentTest {
     }
     private static void food() {
         TestTome core = core();
-        for (int r = 1; r <= 2; r++) {
-            Buff.detach(hero, Barrier.class);
-            core.setCharge(3);
-            rank(Talent.SACRAMENT_VEIL, r); rank(Talent.BLESSED_SACRAMENT, r);
-            hero.HP = 5;
-            Talent.onFoodEaten(hero, 100, null);
-            eq(0, hero.shielding(), "food does not grant instant shielding");
-            eq(5, hero.HP, "food does not instantly heal");
-            check(hero.buff(RapunzelTalents.BlessedSacrament.class) == null, "food does not start healing ticks");
-            RapunzelTalents.SacramentReady ready = hero.buff(RapunzelTalents.SacramentReady.class);
-            check(ready != null, "food prepares sacrament");
-            Talent.onFoodEaten(hero, 100, null);
-            check(ready == hero.buff(RapunzelTalents.SacramentReady.class), "re-eating does not stack preparation");
-            GuidingLight.INSTANCE.onSpellCast(core, hero);
-            eq(1 + 2*r, hero.shielding(), "next successful protocol grants food shield");
-            check(hero.buff(RapunzelTalents.SacramentReady.class) == null, "shared preparation consumed once");
-            RapunzelTalents.BlessedSacrament buff = hero.buff(RapunzelTalents.BlessedSacrament.class);
-            check(buff != null, "same protocol starts blessed healing");
-            eq(5, hero.HP, "first healing tick is deferred");
-            for (int turn = 0; turn < 1+r; turn++) buff.act();
-            eq(6 + r, hero.HP, "1 HP for exactly 2/3 turns");
-            check(hero.buff(RapunzelTalents.BlessedSacrament.class) == null, "meal healing expires");
-            GuidingLight.INSTANCE.onSpellCast(core, hero);
-            eq(1 + 2*r, hero.shielding(), "another protocol cannot reuse preparation");
-            check(hero.buff(RapunzelTalents.BlessedSacrament.class) == null, "another protocol cannot restart consumed healing");
+        for (int r=1; r<=2; r++) {
+            Buff.detach(hero, Barrier.class); Buff.detach(hero, RapunzelTalents.BlessedSacrament.class);
+            rank(Talent.SACRAMENT_VEIL,r); rank(Talent.BLESSED_SACRAMENT,r); hero.HP=5;
+            Talent.onFoodEaten(hero,100,null);
+            eq(1+2*r,hero.shielding(),"instant meal shield"); eq(5,hero.HP,"recovery starts with next tick");
+            check(hero.buff(RapunzelTalents.SacramentReady.class)==null,"no preparation required");
+            RapunzelTalents.BlessedSacrament recovery=hero.buff(RapunzelTalents.BlessedSacrament.class);
+            check(recovery!=null,"recovery begins on food");
+            core.setCharge(3); GuidingLight.INSTANCE.onSpellCast(core,hero);
+            eq(1+2*r,hero.shielding(),"protocol grants no additional meal shield");
+            for(int i=0;i<1+r;i++) recovery.act();
+            eq(6+r,hero.HP,"exact recovery duration");
+            check(hero.buff(RapunzelTalents.BlessedSacrament.class)==null,"recovery expires");
         }
-        // Either meal talent alone prepares and triggers only its own effect.
-        Buff.detach(hero, Barrier.class); rank(Talent.SACRAMENT_VEIL, 0); rank(Talent.BLESSED_SACRAMENT, 2);
-        core.setCharge(3); Talent.onFoodEaten(hero, 100, null); GuidingLight.INSTANCE.onSpellCast(core, hero);
-        eq(0, hero.shielding(), "blessed-only preparation grants no shield");
-        check(hero.buff(RapunzelTalents.BlessedSacrament.class) != null, "blessed-only preparation works");
-        Buff.detach(hero, RapunzelTalents.BlessedSacrament.class);
-        rank(Talent.SACRAMENT_VEIL, 2); rank(Talent.BLESSED_SACRAMENT, 0);
-        core.setCharge(3); Talent.onFoodEaten(hero, 100, null); GuidingLight.INSTANCE.onSpellCast(core, hero);
-        eq(5, hero.shielding(), "veil-only preparation works");
-        check(hero.buff(RapunzelTalents.BlessedSacrament.class) == null, "veil-only preparation grants no healing");
+        Buff.affect(hero,RapunzelTalents.SacramentReady.class);
+        Talent.onFoodEaten(hero,100,null);
+        check(hero.buff(RapunzelTalents.SacramentReady.class)==null,"obsolete save marker removed");
     }
     private static void potion() {
         com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion.initColors();
@@ -209,9 +214,9 @@ public class RapunzelTalentTest {
         eq(3, core.availableCharge(), "failed protocols spend no charges");
         core.setCharge(0); guidance.select(core, hero, 56); EmergencyRepair.INSTANCE.onCast(core, hero);
         eq(0, core.availableCharge(), "unaffordable protocols cannot refund charges");
-        check(hero.buff(RapunzelTalents.SacramentReady.class) != null, "failures retain prepared sacrament");
-        check(hero.buff(RapunzelTalents.BlessedSacrament.class) == null, "failures do not start healing");
-        eq(0, hero.shielding(), "failures do not grant meal shields");
+        check(hero.buff(RapunzelTalents.SacramentReady.class) == null, "no preparation after failures");
+        check(hero.buff(RapunzelTalents.BlessedSacrament.class) != null, "food already started healing");
+        eq(5, hero.shielding(), "food already granted shield");
         check(!hero.buff(RapunzelTalents.PilgrimHaste.class).refundUsed(), "failures retain haste refund eligibility");
     }
     private static void guidance() {
@@ -250,7 +255,7 @@ public class RapunzelTalentTest {
         TestMob lost = enemy(62); lost.HP = 0;
         check(!GuidingLight.completeRapunzelHit(core, hero, lost, 10), "target lost before impact fails protocol");
         eq(3, core.availableCharge(), "lost target consumes no core charge");
-        check(hero.buff(RapunzelTalents.SacramentReady.class) != null, "lost target retains preparation");
+        check(hero.buff(RapunzelTalents.SacramentReady.class) == null, "lost target creates no preparation");
         check(!hero.buff(RapunzelTalents.PilgrimHaste.class).refundUsed(), "lost target retains refund eligibility");
         check(GuidingLight.completeRapunzelHit(core, hero, hit, 10), "valid impact completes actual protocol");
         eq(3, core.availableCharge(), "actual guiding impact spends and refunds one charge");
@@ -283,7 +288,7 @@ public class RapunzelTalentTest {
         TestTome core = core(); Talent.onFoodEaten(hero, 100, null); RapunzelTalents.onEnemySeen(hero, enemy(56));
         Bundle saved = new Bundle(); hero.storeInBundle(saved);
         TestHero restored = new TestHero(); Dungeon.hero = restored; restored.restoreFromBundle(saved);
-        check(restored.buff(RapunzelTalents.SacramentReady.class) != null, "prepared meal survives save");
+        check(restored.buff(RapunzelTalents.SacramentReady.class) == null, "no pending preparation saved");
         check(!restored.buff(RapunzelTalents.PilgrimHaste.class).refundUsed(), "unused refund survives save");
         HolyTome restoredCore = restored.belongings.getItem(HolyTome.class);
         GuidingLight.INSTANCE.onSpellCast(restoredCore, restored);
@@ -302,7 +307,7 @@ public class RapunzelTalentTest {
         Buff.affect(hero, Talent.SatiatedSpellsTracker.class);
         Bundle legacy = new Bundle(); hero.storeInBundle(legacy);
         TestHero legacyRestored = new TestHero(); Dungeon.hero = legacyRestored; legacyRestored.restoreFromBundle(legacy);
-        check(legacyRestored.buff(RapunzelTalents.SacramentReady.class) != null, "legacy prepared meal migrated");
+        check(legacyRestored.buff(RapunzelTalents.SacramentReady.class) == null, "legacy pending meal discarded safely");
         check(legacyRestored.buff(Talent.SatiatedSpellsTracker.class) == null, "legacy prepared meal tracker removed");
         Bundle oldHaste = new Bundle(); RapunzelTalents.PilgrimHaste old = new RapunzelTalents.PilgrimHaste(); old.restoreFromBundle(oldHaste);
         check(!old.refundUsed(), "old haste without flag defaults to unused");
@@ -326,7 +331,7 @@ public class RapunzelTalentTest {
         eq(15, hero.HP, "recovery goes through normal actual healing");
         eq(15, nearby.HP, "actual recovery forwards 50 percent to ally");
         eq(9, hero.shielding(), "Pure Grace veil plus prepared food shield");
-        eq(2, hero.buff(RapunzelTalents.GraceCounter.class).stacks(), "healing and shield generate two counter stacks");
+        eq(3, hero.buff(RapunzelTalents.GraceCounter.class).stacks(), "food shield, healing, healing shield generate three counter stacks");
         RapunzelTalents.BlessedSacrament buff = hero.buff(RapunzelTalents.BlessedSacrament.class);
         for (int t=0; t<3; t++) buff.act();
         eq(18, hero.HP, "recovery triggers prepared 3-turn healing");
@@ -336,7 +341,7 @@ public class RapunzelTalentTest {
         eq(4, hero.shielding(), "only actual healing fires Pure Grace shielding");
         core.setCharge(3); Talent.onFoodEaten(hero, 100, null); EmergencyRepair.INSTANCE.onCast(core, hero);
         eq(3, core.availableCharge(), "full-HP recovery spends no charge");
-        check(hero.buff(RapunzelTalents.SacramentReady.class) != null, "full-HP failure preserves preparation");
+        check(hero.buff(RapunzelTalents.SacramentReady.class) == null, "full-HP failure creates no preparation");
         core.setQuickSpell(EmergencyRepair.INSTANCE);
         Bundle saved = new Bundle(); core.storeInBundle(saved); HolyTome restored = new HolyTome(); restored.restoreFromBundle(saved);
         Bundle after = new Bundle(); restored.storeInBundle(after);
@@ -504,7 +509,7 @@ public class RapunzelTalentTest {
         Buff.affect(hero, Barrier.class).setShield(3);
         eq(1, hero.buff(RapunzelTalents.GraceCounter.class).stacks(), "no stack for a shield that did not increase");
         hero.HP = 5; hero.heal(1);
-        eq(2, hero.buff(RapunzelTalents.GraceCounter.class).stacks(), "capped at two stacks");
+        eq(2, hero.buff(RapunzelTalents.GraceCounter.class).stacks(), "two independent gain events");
         TestMob mob = enemy(56);
         hero.attackProc(mob, 10);
         eq(2, hero.buff(RapunzelTalents.GraceCounter.class).stacks(), "direct proc outside a normal attack preserves stacks");
@@ -655,6 +660,256 @@ public class RapunzelTalentTest {
         }
     }
 
+    private static void armor(com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.ArmorAbility ability) {
+        hero.armorAbility=ability; hero.talents.get(3).clear(); Talent.initArmorTalents(hero);
+    }
+    private static void directMagic() {
+        rank(Talent.JAMMING_PULSE,2); int applied=0;
+        for(int i=0;i<200;i++) { TestMob mob=enemy(56); RapunzelTalents.magicDamage(hero,mob,1,new WandOfMagicMissile(),false); if(mob.buff(RapunzelTalents.Jamming.class)!=null) applied++; level.mobs.remove(mob); }
+        check(applied>35 && applied<85,"direct magic pulse probability");
+        TestMob mob=enemy(56);
+        for(int i=0;i<100;i++) mob.damage(0,new com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Poison());
+        check(mob.buff(RapunzelTalents.Jamming.class)==null,"DOTs cannot pulse");
+        for(int i=0;i<100;i++) mob.damage(0,new Object());
+        check(mob.buff(RapunzelTalents.Jamming.class)==null,"environment cannot pulse");
+    }
+    private static void packetDedup() {
+        rank(Talent.JAMMING_PULSE,2); int applied=0;
+        for(int i=0;i<200;i++) {
+            TestMob mob=enemy(56);
+            RapunzelTalents.DirectAttack captured;
+            try(RapunzelTalents.DirectAttack event=RapunzelTalents.directAttack(hero,true)) {
+                for(int j=0;j<20;j++) {
+                    if (j%2==0) mob.damage(0,new WandOfMagicMissile());
+                    else RapunzelTalents.magicDamage(hero,mob,0,new WandOfMagicMissile(),false);
+                }
+                captured = RapunzelTalents.captureDirectAttack(hero);
+            }
+            RapunzelTalents.resumeDirectAttack(captured, () -> {
+                for(int j=0;j<20;j++) mob.damage(0,new WandOfMagicMissile());
+            });
+            if(mob.buff(RapunzelTalents.Jamming.class)!=null) applied++; level.mobs.remove(mob);
+        }
+        check(applied>35 && applied<85,"20 packets still yield one 30% roll");
+    }
+    private static void unlimitedCounter() {
+        subclass(HeroSubClass.PURE_GRACE); rank(Talent.GRACE_COUNTERATTACK,3);
+        for(int count:new int[]{3,10,21,35}) {
+            Buff.detach(hero,RapunzelTalents.GraceCounter.class);
+            RapunzelTalents.GraceCounter counter=Buff.affect(hero,RapunzelTalents.GraceCounter.class);
+            for(int i=0;i<count;i++) counter.addStack();
+            Bundle saved=new Bundle(); counter.storeInBundle(saved);
+            RapunzelTalents.GraceCounter restored=new RapunzelTalents.GraceCounter(); restored.restoreFromBundle(saved);
+            eq(count,restored.stacks(),"unlimited stack save");
+            TestMob mob=enemy(56); mob.evasion=Char.INFINITE_EVASION; hero.attack(mob);
+            eq(count,counter.stacks(),"miss preserves all stacks");
+            mob.evasion=0; mob.armor=100; hero.attack(mob);
+            eq(count*6,mob.lastDamage,"armor zero damage hit consumes every stack");
+            check(hero.buff(RapunzelTalents.GraceCounter.class)==null,"all stacks consumed"); level.mobs.remove(mob);
+        }
+    }
+    private static void output() {
+        TestTome core=core(); hero.lvl=1;
+        eq(0,RapunzelTalents.coreOutput(hero,core),"early output minimum");
+        hero.lvl=20; hero.STR=16; core.level(4);
+        eq(10,RapunzelTalents.coreOutput(hero,core),"level strength tome output");
+        eq(12,GuidingLight.minimumDamage(hero,core),"guidance minimum scales"); eq(18,GuidingLight.maximumDamage(hero,core),"guidance maximum scales");
+        Buff.affect(hero,com.shatteredpixel.shatteredpixeldungeon.actors.buffs.AdrenalineSurge.class).reset(2,200);
+        eq(11,RapunzelTalents.coreOutput(hero,core),"actual STR includes buff bonus");
+        Buff.detach(hero,com.shatteredpixel.shatteredpixeldungeon.actors.buffs.AdrenalineSurge.class);
+        eq(7,RapunzelTalents.fireSupport(hero),"fire support output scaling");
+        eq(4,RapunzelTalents.wardReduction(hero),"ward output scaling");
+        hero.STR=9; hero.lvl=1; core.level(0);
+        eq(0,RapunzelTalents.coreOutput(hero,core),"floor negative strength and clamp");
+    }
+    public static class CountingEnchant extends com.shatteredpixel.shatteredpixeldungeon.items.weapon.Weapon.Enchantment {
+        public int calls;
+        @Override public int proc(com.shatteredpixel.shatteredpixeldungeon.items.weapon.Weapon weapon,Char attacker,Char defender,int damage) { calls++; return damage+3; }
+        @Override public com.shatteredpixel.shatteredpixeldungeon.sprites.ItemSprite.Glowing glowing() { return new com.shatteredpixel.shatteredpixeldungeon.sprites.ItemSprite.Glowing(0xFFFFFF); }
+    }
+    public static class CountingGlyph extends com.shatteredpixel.shatteredpixeldungeon.items.armor.Armor.Glyph {
+        public int calls;
+        @Override public int proc(com.shatteredpixel.shatteredpixeldungeon.items.armor.Armor armor,Char attacker,Char defender,int damage) { calls++; return damage-2; }
+        @Override public com.shatteredpixel.shatteredpixeldungeon.sprites.ItemSprite.Glowing glowing() { return new com.shatteredpixel.shatteredpixeldungeon.sprites.ItemSprite.Glowing(0xFFFFFF); }
+    }
+    private static void equipment() {
+        core(); hero.lvl=20; hero.STR=16;
+        Cudgel weapon=new Cudgel(); CountingEnchant enchant=new CountingEnchant(); weapon.enchantment=enchant; hero.belongings.weapon=weapon;
+        Buff.prolong(hero,HolyWeapon.HolyWepBuff.class,50); TestMob mob=enemy(56);
+        eq(13,weapon.proc(hero,mob,10),"original enchant proc retained"); eq(1,enchant.calls,"original enchant called once");
+        eq(RapunzelTalents.fireSupport(hero),mob.lastDamage,"additional magic packet scales");
+        check(weapon.hasEnchant(CountingEnchant.class,hero),"enchantment lookup preserved");
+        ClothArmor gear=new ClothArmor(); CountingGlyph glyph=new CountingGlyph(); gear.glyph=glyph; hero.belongings.armor=gear;
+        Buff.prolong(hero,HolyWard.HolyArmBuff.class,50);
+        eq(20-2-RapunzelTalents.wardReduction(hero),gear.proc(mob,hero,20),"original glyph plus scaled ward");
+        eq(1,glyph.calls,"original glyph called once"); check(gear.hasGlyph(CountingGlyph.class,hero),"glyph lookup preserved");
+    }
+    private static void prayer() {
+        armor(new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer()); hero.lvl=10; hero.HT=200;
+        TestMob ally=ally(56), far=ally(60), enemy=enemy(57); int enemyHP=enemy.HP;
+        hero.HP=10; com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer.pray(hero);
+        eq(23,hero.HP,"prayer heals self"); eq(23,ally.HP,"prayer heals nearby ally"); eq(10,far.HP,"far ally excluded"); eq(enemyHP,enemy.HP,"enemy excluded"); eq(10,hero.shielding(),"prayer base shield");
+        for(int r=1;r<=4;r++) { rank(Talent.OVERFLOWING_GRACE,r); eq(Math.round(13*(1+.2f*r)),com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer.healing(hero),"overflow rank"); }
+        rank(Talent.PURIFYING_GRACE,4); eq(Math.round(13*2.05f),com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer.healing(hero),"additive 105% healing");
+    }
+    private static void purification() {
+        armor(new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer());
+        for(int r=1;r<=4;r++) {
+            rank(Talent.PURIFYING_GRACE,r);
+            Buff.affect(hero,com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Poison.class);
+            Buff.affect(hero,com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Weakness.class);
+            Buff.affect(hero,com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Blindness.class);
+            Buff.affect(hero,RapunzelTalents.PilgrimCooldown.class);
+            com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer.pray(hero);
+            check(hero.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Poison.class)==null,"poison cleansed");
+            check(hero.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Weakness.class)==null,"weakness cleansed");
+            check(hero.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Blindness.class)==null,"blindness cleansed");
+            check(hero.buff(RapunzelTalents.PilgrimCooldown.class)!=null,"system marker preserved");
+            if(r>=2) eq(r>=3?20:10,hero.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.BlobImmunity.class).cooldown(),"exact immunity duration");
+        }
+    }
+    private static void echo() {
+        armor(new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer()); hero.HT=200;
+        for(int r=1;r<=4;r++) {
+            rank(Talent.PRAYER_ECHO,r); rank(Talent.PURIFYING_GRACE,2); hero.HP=1; Buff.detach(hero,Barrier.class);
+            com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer.pray(hero);
+            com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer.PrayerEcho echo=hero.buff(com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer.PrayerEcho.class);
+            eq(3,echo.cooldown(),"echo delay exactly 3"); eq(Math.round(8*(.15f+.1f*r)),echo.heal,"echo healing rank"); eq(Math.round(10*(.15f+.1f*r)),echo.shield,"echo shielding rank");
+            Bundle saved=new Bundle(); echo.storeInBundle(saved);
+            com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer.PrayerEcho restored=new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer.PrayerEcho(); restored.restoreFromBundle(saved);
+            eq(hero.id(),restored.ids[0],"echo target saved"); eq(3,restored.cooldown(),"echo timer saved");
+            Buff.detach(hero,com.shatteredpixel.shatteredpixeldungeon.actors.buffs.BlobImmunity.class); Buff.affect(hero,com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Weakness.class);
+            int before=hero.HP,shield=hero.shielding(); echo.act();
+            eq(before+restored.heal,hero.HP,"echo actual heal"); eq(shield+restored.shield,hero.shielding(),"echo actual shield");
+            check(hero.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Weakness.class)!=null,"echo does not cleanse"); check(hero.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.BlobImmunity.class)==null,"echo does not regrant immunity");
+        }
+    }
+    private static void descent() {
+        armor(new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent()); core(); hero.lvl=10;
+        TestMob center=enemy(56), other=enemy(57), ally=ally(58), far=enemy(62);
+        com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.descend(hero,56);
+        check(center.lastDamage>=Math.round(15*1.5f) && center.lastDamage<=Math.round(19*1.5f),"center 50% bonus");
+        check(other.lastDamage>=15 && other.lastDamage<=19,"area magic range"); eq(0,ally.lastDamage,"allies excluded"); eq(0,far.lastDamage,"outside radius excluded");
+        eq(4,center.buff(RapunzelTalents.Jamming.class).cooldown(),"base guaranteed jam");
+        for(int r=1;r<=4;r++) { rank(Talent.RESONANCE_COLLAPSE,r); eq(Math.round(100*(1+.15f*r)*1.1f),com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.scaledDamage(hero,center,100,false),"collapse prejam extra"); }
+        TestMob fresh=enemy(59); eq(160,com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.scaledDamage(hero,fresh,100,false),"new jam no retroactive bonus");
+    }
+    private static void rampage() {
+        armor(new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent());
+        for(int r=1;r<=4;r++) {
+            rank(Talent.JAMMER_RAMPAGE,r); TestMob mob=enemy(56);
+            com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.jam(hero,mob);
+            eq(5,mob.buff(RapunzelTalents.Jamming.class).cooldown(),"rampage extra turn");
+            eq(r>=2?.75f:.8f,mob.buff(RapunzelTalents.Jamming.class).accuracyMultiplier(),"rampage accuracy");
+            RapunzelTalents.magicDamage(hero,mob,100,new WandOfMagicMissile(),false); eq(r>=3?110:100,mob.lastDamage,"rampage direct magic vulnerability"); level.mobs.remove(mob);
+        }
+    }
+    private static void overdrive() {
+        armor(new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.CoreOverdrive()); TestTome core=core(); core.setCharge(0);
+        check(com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.CoreOverdrive.start(hero),"overdrive starts"); eq(3,core.availableCharge(),"fills core"); eq(10,hero.buff(RapunzelTalents.CoreOverdriveState.class).cooldown(),"base duration");
+        eq(.5f,core.protocolCost(hero,GuidingLight.INSTANCE),"half float cost");
+        new TestProtocol(1).onCast(core,hero); eq(2.5f,core.availableCharge(),"fractional spending"); check(hero.buff(RapunzelTalents.ProtocolHaste.class)!=null,"successful protocol grants haste"); TestMob moving=ally(56); Buff.prolong(moving,RapunzelTalents.ProtocolHaste.class,1); eq(1.5f,moving.speed(),"protocol movement 50%"); eq(1,hero.buff(RapunzelTalents.ProtocolHaste.class).cooldown(),"one-turn movement");
+        for(int r=1;r<=4;r++) { rank(Talent.EXTENDED_OUTPUT,r); eq(10+2*r,com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.CoreOverdrive.duration(hero),"extended output rank"); }
+        Buff.detach(hero,RapunzelTalents.CoreOverdriveState.class); eq(1,core.protocolCost(hero,GuidingLight.INSTANCE),"normal costs restored");
+    }
+    private static void chain() {
+        armor(new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.CoreOverdrive()); TestTome core=core();
+        for(int r=1;r<=4;r++) {
+            rank(Talent.PROTOCOL_CHAIN,r); com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.CoreOverdrive.start(hero);
+            new TestProtocol(2).onCast(core,hero);
+            eq(Math.max(0,1-.25f*r),core.protocolCost(hero,new TestProtocol(2)),"half then flat reduction");
+            float before=core.availableCharge(); new TestProtocol(2).onCast(core,hero);
+            eq(before-Math.max(0,1-.25f*r),core.availableCharge(),"chain actual cost");
+            eq(.25f*r,hero.buff(RapunzelTalents.CoreOverdriveState.class).chain,"chain rearmed after success");
+            core.cursed=true; new TestProtocol(2).onCast(core,hero); core.cursed=false;
+            eq(.25f*r,hero.buff(RapunzelTalents.CoreOverdriveState.class).chain,"failure preserves chain");
+        }
+    }
+    private static void miracle() {
+        armor(new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.CoreOverdrive()); TestTome core=core(); hero.HT=200;
+        for(int r=1;r<=4;r++) {
+            rank(Talent.PILGRIMS_MIRACLE,r); hero.HP=10; Buff.detach(hero,Barrier.class);
+            com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.CoreOverdrive.start(hero);
+            eq(10+(r==2?0:r==4?8:5),hero.HP,"miracle healing rank"); eq(r==1?0:r==4?8:5,hero.shielding(),"miracle shielding rank");
+        }
+        for(int i=0;i<12;i++) Buff.prolong(enemy(56+i),RapunzelTalents.Jamming.class,5);
+        com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.CoreOverdrive.start(hero);
+        RapunzelTalents.CoreOverdriveState od=hero.buff(RapunzelTalents.CoreOverdriveState.class); eq(2,od.reserve,"reserve cap");
+        Bundle saved=new Bundle(); od.storeInBundle(saved); RapunzelTalents.CoreOverdriveState restored=new RapunzelTalents.CoreOverdriveState(); restored.restoreFromBundle(saved); eq(2,restored.reserve,"reserve saved");
+        new TestProtocol(1).onCast(core,hero); eq(3,core.availableCharge(),"reserve pays first"); eq(1.5f,od.reserve,"reserve consumed by actual half cost");
+        new TestProtocol(0).onCast(core,hero); eq(1.5f,od.reserve,"free protocol leaves reserve");
+        od.act(); check(hero.buff(RapunzelTalents.CoreOverdriveState.class)==null,"reserve expires with overdrive");
+    }
+    private static void fourthMigration() {
+        com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.ArmorAbility[] old={new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.cleric.AscendedForm(),new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.cleric.Trinity(),new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.cleric.PowerOfMany()};
+        String[][] names={{"DIVINE_INTERVENTION","JUDGEMENT","FLASH"},{"BODY_FORM","MIND_FORM","SPIRIT_FORM"},{"BEAMING_RAY","LIFE_LINK","STASIS"}};
+        for(int i=0;i<old.length;i++) {
+            armor(old[i]); for(Talent t:old[i].talents()) rank(t,3);
+            Bundle saved=new Bundle();hero.storeInBundle(saved); TestHero restored=new TestHero(); Dungeon.hero=restored;restored.restoreFromBundle(saved);
+            check(restored.armorAbility.getClass()==RapunzelTalents.migrateAbility(old[i]).getClass(),"legacy armor ability migrated");
+            for(String name:names[i]) eq(3,restored.pointsInTalent(Talent.valueOf(RapunzelTalents.migrateTalent(restored,name))),"legacy tier4 points migrated");
+            eq(3,restored.pointsInTalent(Talent.HEROIC_ENERGY),"heroic energy preserved"); Dungeon.hero=hero;
+        }
+    }
+
+    private static void wardGrace() {
+        TestTome core=core(); hero.lvl=20; hero.STR=16; subclass(HeroSubClass.PURE_GRACE); rank(Talent.GRACE_COUNTERATTACK,1);
+        HolyWard.applyWard(core,hero);
+        eq(RapunzelTalents.coreOutput(hero)/2,hero.shielding(),"Pure Grace ward barrier");
+        eq(1,hero.buff(RapunzelTalents.GraceCounter.class).stacks(),"ward actual shielding grants counter stack");
+        eq(50,hero.buff(HolyWard.HolyArmBuff.class).cooldown(),"ward duration");
+    }
+    private static void naturalCharging() {
+        TestTome core=core(); core.setCharge(0);
+        HolyTome.TomeRecharge charging=hero.buff(HolyTome.TomeRecharge.class); charging.act(); float normal=core.availableCharge();
+        armor(new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.CoreOverdrive());
+        com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.CoreOverdrive.start(hero); core.setCharge(0); charging.act();
+        eq(normal*2,core.availableCharge(),"natural charging exactly doubles");
+    }
+    private static void collision() {
+        armor(new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent());
+        TestMob mob=enemy(56); level.solid[58]=true;
+        rank(Talent.FORCED_VIBRATION,1); eq(0,com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.push(hero,mob,55,100),"rank1 one tile no collision");
+        rank(Talent.FORCED_VIBRATION,2); eq(0,com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.push(hero,mob,55,100),"rank2 two tiles no damage");
+        rank(Talent.FORCED_VIBRATION,3); eq(25,com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.push(hero,mob,55,100),"wall collision quarter damage");
+        rank(Talent.FORCED_VIBRATION,4); eq(25,com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.push(hero,mob,55,100),"rank4 collision");
+        eq(1,mob.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Paralysis.class).cooldown(),"collision paralysis 1 turn");
+        TestMob edge = enemy(58); eq(25,com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.push(hero,edge,57,100),"outer boundary wall collision");
+        mob.immovable(); eq(0,com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.push(hero,mob,55,100),"immovable excluded");
+    }
+    private static void jamImmunity() {
+        armor(new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent()); rank(Talent.JAMMER_RAMPAGE,4);
+        TestMob ordinary=enemy(56); ordinary.jamImmune();
+        com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.jam(hero,ordinary);
+        eq(2,ordinary.buff(RapunzelTalents.Jamming.class).cooldown(),"ordinary immunity minimum jam");
+        TestMob boss=enemy(57); boss.jamImmune(); boss.boss();
+        com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.jam(hero,boss);
+        check(boss.buff(RapunzelTalents.Jamming.class)==null,"protected boss immunity retained");
+        TestMob resistant=enemy(58); resistant.jamResistant=true;
+        com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.jam(hero,resistant);
+        eq(2,resistant.buff(RapunzelTalents.Jamming.class).cooldown(),"zero resistance duration minimum 2");
+        Bundle saved=new Bundle(); ordinary.storeInBundle(saved); TestMob restored=new TestMob();restored.restoreFromBundle(saved);
+        check(restored.buff(RapunzelTalents.Jamming.class).magicVulnerability,"rampage vulnerability saved"); check(restored.buff(RapunzelTalents.Jamming.class).rampageAccuracy,"rampage accuracy saved");
+    }
+    private static void prayerGrace() {
+        armor(new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer()); subclass(HeroSubClass.PURE_GRACE);
+        rank(Talent.GRACE_VEIL,1); rank(Talent.GRACE_COUNTERATTACK,1); rank(Talent.PURIFYING_GRACE,4);rank(Talent.OVERFLOWING_GRACE,4);
+        hero.HT=200;hero.HP=1;
+        com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer.pray(hero);
+        eq(17,hero.HP,"one increased prayer healing event"); eq(14,hero.shielding(),"prayer plus grace veil");
+        eq(3,hero.buff(RapunzelTalents.GraceCounter.class).stacks(),"one heal, veil shield, prayer shield");
+    }
+    private static void fourthMessages() {
+        for(Languages lang:new Languages[]{Languages.ENGLISH,Languages.KOREAN}) {
+            Messages.setup(lang);
+            for(com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.ArmorAbility ability:HeroClass.CLERIC.armorAbilities()) {
+                armor(ability);check(!ability.name().equals(Messages.NO_TEXT_FOUND),"armor name exists");check(!ability.desc().contains(Messages.NO_TEXT_FOUND),"armor description exists");
+                for(Talent t:ability.talents()) {check(!t.title().equals(Messages.NO_TEXT_FOUND),"tier4 title exists");check(!t.desc().contains(Messages.NO_TEXT_FOUND),"tier4 desc exists");}
+            }
+            check(Talent.HERE_I_GO.title().contains(lang==Languages.KOREAN?"갑니다!":"Here"),"haste title punctuation remains");
+        }
+    }
+
     private static void setupFiles() {
         com.watabou.noosa.Game.version = "rapunzel-test";
         com.badlogic.gdx.utils.GdxNativesLoader.load();
@@ -693,6 +948,11 @@ public class RapunzelTalentTest {
         @Override public int attackSkill(Char target) { return Char.INFINITE_ACCURACY; }
     }
     public static class TestMob extends Mob {
+        public void immovable() { properties.add(Char.Property.IMMOVABLE); }
+        public void boss() { properties.add(Char.Property.BOSS); }
+        public void jamImmune() { immunities.add(RapunzelTalents.Jamming.class); }
+        public boolean jamResistant;
+        @Override public float resist(Class effect) { return jamResistant && effect == RapunzelTalents.Jamming.class ? 0f : super.resist(effect); }
         public int lastDamage;
         public int evasion;
         public int armor;
@@ -700,7 +960,7 @@ public class RapunzelTalentTest {
         public TestMob() { HP = HT = 100; alignment = Alignment.ENEMY; }
         @Override public int defenseSkill(Char enemy) { return evasion; }
         @Override public int defenseProc(Char enemy, int damage) { return rejectDamage ? -1 : damage; }
-        @Override public void damage(int damage, Object source) { lastDamage = damage; HP = Math.max(1, HP - damage); }
+        @Override public void damage(int damage, Object source) { damage = RapunzelTalents.directPacket(this, damage, source); lastDamage = damage; HP = Math.max(1, HP - damage); }
         @Override public int drRoll() { return armor; }
     }
     public static class TestLevel extends Level {

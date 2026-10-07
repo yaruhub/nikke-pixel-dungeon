@@ -1,151 +1,117 @@
-# 라푼젤 1–3티어 구현 기록
+# 라푼젤 1–4티어 플레이테스트 패치
 
-작업 브랜치: `feature/rapunzel-t3-test`. 기준 커밋: `8311722f412216ffce0ef3c1698c4a59c19589d4` (작업 시작 당시 `origin/master`).
+작업 브랜치: `feature/rapunzel-t3-test`. `HeroClass.CLERIC` 슬롯을 사용합니다. 기존 1–3티어 전직과 해금 레벨은 유지하며 4티어 선택은 라푼젤 전용 능력으로 교체했습니다.
 
-## 주요 구현 방식
+## 저티어·전술 지원 코어
 
-- `HeroClass.CLERIC`의 특성 슬롯과 전직 선택을 라푼젤로 교체했습니다. 1티어 4개, 2티어 5개, 공통 3티어 2개와 전직별 3티어 3개를 연결했습니다.
-- `RapunzelTalents`에서 음식, 일반 공격, 최초 실제 시야, 장비 획득, 유물 사용, 실제 회복과 보호막 증가를 처리합니다. 재머 증폭은 일반 공격·표적 유도·진동 지팡이·쉴드 돌진에 적용하며 새 재밍 부여보다 먼저 계산합니다. 마법막대·주문·무기 액티브는 일반 공격 효과를 발생시키지 않습니다.
-- 최초 공격·목격 기록은 적 개체의 영구 버프로 저장합니다. 공용 목격 대기시간 동안 만난 적도 기록하며, 성찬 준비·재밍·가속·가속당 환급 사용 여부·회복 턴·대기시간·반격 스택·전달 회복 소수량은 세이브에 보존합니다.
-- 실제 회복은 `Char.heal()`에서 최대 HP로 제한한 변화량으로 계산합니다. 자연 회복, 음식, 물약, 이슬, 식물, 마법막대와 아군의 회복 경로를 연결했습니다. 최대 HP 증가·부활·소환 초기 HP는 회복으로 취급하지 않습니다.
-- 퓨어 그레이스의 회복 전달은 재전달을 차단합니다. 전달된 회복으로 라푼젤의 보호막과 반격은 발동할 수 있습니다. 실제 회복 1회 + 실제 보호막 증가 1회로 반격 2스택을 얻습니다.
-- 파페사 액티브는 전술 지원 코어(`HolyTome`)의 3티어 주문 목록과 빠른 사용 목록에 등록했습니다. 진동 지팡이는 마법 피해, 쉴드 돌진은 방어력 감소를 받는 피해입니다. 공진 과부하는 두 액티브에만 적용합니다.
-- 캐릭터 선택 화면의 특성 정보는 진행도와 관계없이 1·2티어를 보여줍니다. 게임 내 특성 해금 레벨과 투자 규칙은 유지했습니다.
-- 한국어·영어 이름과 설명을 추가했습니다. 기존 특성/전직 아이콘을 재사용합니다.
+- 음식 섭취 즉시 성찬의 장막 보호막 3/5를 얻습니다. 축복받은 성찬은 즉시 지속 회복을 시작하고 다음 턴부터 HP 1을 2/3회 회복합니다. 재섭취는 회복 시간을 갱신합니다. 코어 사용 대기는 없습니다.
+- 재밍 펄스는 일반·투척 공격, 즉발 마법막대와 공격성 프로토콜에 적용합니다. 확률 20%/30%, 지속 2/3턴이며 재머 최적화의 지속·명중률·확률 보너스를 공통 적용합니다. 표적 유도는 확정 재밍을 유지합니다.
+- 명시적 동기 직접 공격 구간에 대상별 판정 기록을 두어, 일반 공격의 화력 지원·인챈트 피해나 마법의 여러 패킷이 같은 대상에게 추가 재밍 확률 판정을 만들지 않습니다. 지속 피해, 설치된 장판의 후속 피해, 다른 캐릭터·함정·환경 피해는 제외합니다. 시각 효과 뒤의 즉발 콜백은 같은 공격의 판정 기록만 전달하며 대기 중 활성 피해 구간을 유지하지 않습니다.
+- 재머 증폭과 공진 과부하는 기존 적용 범주와 수치를 유지하고 새 재밍보다 먼저 계산합니다. 순례자의 직감과 반격은 실제 일반 공격 명중 이후에만 소비합니다. 빗나감·피해 처리 거부는 보존하고 방어력으로 기본 피해가 0인 명중은 소비합니다.
+- 은총의 반격은 실제 회복·보호막 증가마다 1스택을 얻고 중첩 상한이 없습니다. 다음 일반 공격 명중에서 전부 소비하며 스택당 추가 피해 2/4/6은 유지합니다.
+- 공통 출력: `max(0, floor(lvl/4) + floor((hero.STR()-10)/2) + floor(tome.level()/2))`.
 
-## 코어와 저티어 연동
+| 프로토콜 | 기본 충전 | 효과 |
+| --- | --- | --- |
+| 표적 유도 | 1 | 마법 피해 `2+출력` ~ `8+출력`; 재밍 펄스 투자 시 확정 재밍 |
+| 화력 지원 | 2 | 50턴, 명중 시 별도 마법 피해 `2+floor(출력/2)`; 기존 인챈트·저주 유지 |
+| 방호 프로토콜 | 1 | 50턴, 기존 피해 범주에 고정 감소 `1+floor(출력/3)`; 상형문자·저주 유지 |
+| 퓨어 그레이스 방호 추가 효과 | — | 성공 사용 즉시 보호막 `floor(출력/2)` 및 실제 보호막 획득 훅 |
+| 응급 복구 | 2 | 구원의 손길 해금, HP `4/6+floor(lvl/2)` 회복 |
 
-- 기본 프로토콜은 **표적 유도 / 화력 지원 / 방호 프로토콜**입니다. 클래스명 `GuidingLight` / `HolyWeapon` / `HolyWard`는 유지하여 기존 빠른 프로토콜 저장값을 복원합니다. 라푼젤 외 클래스의 기존 명칭과 발광 동작은 유지합니다.
-- 음식은 즉시 보호막·지속 회복을 주지 않고 하나의 **성찬 준비**를 만듭니다. 다음 성공한 코어 프로토콜 한 번이 준비를 소모해 성찬의 장막의 보호막 3/5와 축복받은 성찬의 HP 1/턴 × 2/3턴을 함께 발동합니다. 재섭취는 준비를 중첩하지 않습니다. 이미 진행 중인 회복은 유지하며, 준비를 사용한 다음 프로토콜이 회복 지속시간을 갱신합니다.
-- 대상 선택 취소, 잘못된 대상, 충전 부족, 오염·마법 면역으로 인한 사용 거부, 표적 유도 발사 후 대상 소실, 함정으로 인한 돌진 중단은 준비와 환급 기회를 소비하지 않습니다.
-- 표적 유도는 마법 피해 2–8과 재밍 펄스 +1/+2의 확정 재밍 2/3턴을 적용합니다. 공통 3티어 재머 최적화의 지속시간 증가도 적용합니다. 라푼젤의 legacy Illuminated/WasIlluminatedTracker는 부여하지 않고 기존 저장 효과도 제외합니다.
-- 재머 증폭은 이미 재밍된 적에게 해당 공격·프로토콜의 피해를 10%/20% 증가시킵니다. 파페사 액티브의 기존 공진 과부하 배율은 이 결과에 적용합니다(예: +20%와 +30% 동시 적용은 ×1.2×1.3). 새로 부여한 재밍은 같은 타격을 증폭하지 않습니다.
-- 유물 공명은 성공한 코어 프로토콜 후 **다른 유물만** 3/5턴 가속합니다. 다른 유물의 실제 사용은 코어에 충전 0.5/1을 직접 추가합니다. 사용한 유물 인스턴스를 넘기는 API를 추가했고 기존 인자 1개 API와 다른 클래스의 효과는 유지했습니다. 직접 충전·가속은 사용 이벤트를 재호출하지 않아 자기 충전과 재귀를 방지합니다. 비어 있는 연금술 도구나 에너지 0 소모도 충전을 만들지 않습니다.
-- 구원의 손길은 회복 물약 보호막 대신 **응급 복구**를 해금합니다. 충전 2·1턴을 소모해 자기 HP를 4/6 + 레벨/2(내림), 잃은 HP 한도 내에서 회복합니다. 만피에서는 실패로 처리합니다. `Char.heal()`로 은총의 장막·자비의 손길·은총의 반격을 정상 발동하며 준비한 성찬도 함께 사용합니다.
-- **갑니다! 헉, 간다고?**의 최초 발견·15턴 대기시간 규칙은 유지합니다. 각 가속 중 첫 성공 프로토콜은 사용 후 실제 소모량 한도 내에서 최대 충전 1을 환급합니다. 첫 성공이 0 충전 기술이면 환급 없이 기회를 소모합니다. 환급 사용 여부는 버프 설명에 표시하고 저장합니다.
-- 3티어와 `PURE_GRACE` / `RAPUNZEL_PAPESS` 구성 및 기존 액티브 사거리·기본 피해·대기시간은 유지합니다.
+유물 공명은 코어 사용 시 다른 유물만 3/5턴 가속하고 다른 유물의 실제 사용은 코어 충전 0.5/1을 회복합니다. source 유물을 구분해 재귀를 방지합니다. **갑니다! 헉, 간다고?**의 최초 발견·15턴 공용 대기시간·이동속도 +50%·2/3턴·첫 성공 사용 환급 규칙은 유지합니다.
 
-## 수치가 지정되지 않은 부분의 기본값
+## 신규 4티어
 
-| 항목 | 구현값 |
-| --- | --- |
-| 진동 지팡이 | 사거리 6, 피해 6–10 / 9–13 / 12–16, 대기시간 8턴, 충전 소모 없음 |
-| 진동 지팡이 +3 | 대상 주변 2칸 적에게 기본 피해 50%, 벽 차단, 아군 제외 |
-| 쉴드 돌진 | 사거리 4, 피해 4–8, 최대 2칸 밀치기(보스 1칸), 대기시간 10턴, 충전 소모 없음 |
-| 쉴드 돌진 +2/+3 | 충돌 추가 피해 4 / 돌진 후 보호막 5 |
-| 자비의 손길 | 아군 거리 2칸 이내, 소수 회복량은 대상별 누적·저장 |
-| 최초 공격/반격 | 일반 공격 적중 후 피해 처리 진입 시 소비. 빗나감·피해 처리 거부 시 보존, 방어력으로 기본 피해가 0인 적중은 소비 |
-| 음식 재사용 | 성찬 준비만 갱신·중첩 없음. 성공한 다음 코어 사용 시 지속 회복 갱신 및 보호막 획득 |
+각 능력은 전용 특성 3개(각 최대 4포인트)와 기존 `HEROIC_ENERGY`를 사용합니다. 아래 방어구 비용은 영웅적 에너지 적용 전입니다.
 
-## 세이브 호환
+### 성녀의 기도 — 비용 50
 
-- 성찬 준비와 가속당 환급 사용 여부를 버프로 저장합니다. 이전 저장의 대기 중 `SatiatedSpellsTracker`는 성찬 준비로 이전하고, 환급 필드가 없는 이전 가속은 미사용으로 복원합니다. 기존에 시작한 `BlessedSacrament` 회복과 `ArtifactResonance` 지속시간은 보존합니다. 응급 복구도 빠른 프로토콜 저장·복원을 지원합니다.
+자신과 반경 3칸 이내 아군에게 HP `8+floor(lvl/2)` 회복과 보호막 10을 제공합니다. `Char.heal()`과 `Barrier`를 사용해 퓨어 그레이스의 실제 회복·보호막 효과를 정상 발동합니다.
 
-- 기존 로컬 라푼젤 패치의 `SANCTUARY_MEAL` → `SACRAMENT_VEIL`, `BLESSED_MEAL` → `BLESSED_SACRAMENT`, `HAND_OF_SALVATION` → `SAVING_HAND` 이름과 투자 포인트를 이전합니다.
+- 넘치는 은총: 회복량 +20/40/60/80%.
+- 정화의 은총: +1 표준 정화 가능 해로운 효과 제거, +2 BlobImmunity 10턴, +3 20턴, +4 기본 회복량 +25%. 넘치는 은총과 합산하며 한 번만 회복합니다. 시스템·보스·정렬 마커는 제거하지 않습니다.
+- 기도의 메아리: 3턴 후 원래 대상 중 같은 층·분기에 살아 있는 유효한 대상에게 회복·보호막의 25/35/45/55%를 다시 줍니다. 정화와 BlobImmunity는 반복하지 않습니다. 대상 ID·회복량·보호막·층·분기·지연 시간을 저장합니다.
 
-- 이전 `PRIEST` → `PURE_GRACE`, `PALADIN` → `RAPUNZEL_PAPESS`로 복원하며 특성 포인트를 대응 슬롯으로 이전합니다. 레거시 enum 이름은 유지하여 역직렬화를 지원합니다.
-- 전직 업적은 기존 Priest/Paladin 배지와 연결합니다. 현재 선택 목록에서는 레거시 전직을 제외합니다.
-- 이전 전직에서 사용하던 빠른 주문이 현재 주문 목록에 없으면 선택을 해제합니다. 기존 물품과 기본 코어 주문은 유지합니다.
-- 예전 세이브에는 최초 공격/목격 기록이 없으므로 갱신 이후 처음 만나는 시점부터 기록합니다. 새 세이브를 이전 버전에서 여는 역방향 호환은 보장하지 않습니다.
+### 파페사의 강림 — 비용 50
 
-## 검증
+사거리 6, 지정 지점 반경 3칸의 적에게 마법 피해 `8+floor(lvl/2)+출력` ~ `12+floor(lvl/2)+출력`. 중심 대상은 +50%. 기본 재밍 4턴을 부여하며 재밍 펄스를 추가 판정하지 않습니다. 아군과 피해 무적 상태는 제외합니다.
+
+- 공진 붕괴: 피해 +15/30/45/60%, 1포인트 이상이면 공격 전부터 재밍된 적에게 추가 +10%.
+- 강제 진동: +1 바깥으로 1칸, +2 2칸, +3 벽·고정 공간 장애로 막힌 경우 본 피해의 25% 추가 충돌 피해, +4 실제 충돌 피해가 발생한 적에게 마비 1턴. 기존 밀치기 유틸리티로 이동·낙하 처리를 재사용합니다. 보스 거리 감소·고정형/속박 면역을 유지합니다.
+- 재머 폭주: +1 강림 재밍 +1턴, +2 명중률 감소 추가 5%p, +3 강림 재밍 중 직접 마법 피해 +10%, +4 일반 재밍 저항·면역에 최소 2턴. 보호된 보스/시스템 상태는 유지합니다. 강림 재밍의 명중률·취약 플래그를 저장합니다.
+
+### 코어 오버드라이브 — 비용 35
+
+사용 가능한 코어를 최대 충전하고 기본 10턴 동안 프로토콜 비용을 50% 감소시킵니다. 자연 충전 속도는 기존 RingOfEnergy 배율에 2배를 곱합니다. 성공 프로토콜 사용마다 이동속도 +50%를 1턴 부여합니다. 무료 기술은 이동 효과만 받을 수 있습니다.
+
+- 확장 출력: 지속 12/14/16/18턴.
+- 프로토콜 연쇄: 성공 사용 이후 다음 비용에 0.25/0.50/0.75/1.00을 추가 할인합니다. 50% 할인 후 적용, 최저 0. 실패/취소는 보존하며 성공하면 소비하고 다시 다음 할인으로 갱신합니다.
+- 순례자의 기적: +1 HP 5, +2 보호막 5, +3 둘 다 5, +4 둘 다 8. +4는 살아 있는 재밍 적마다 0.25의 예비 충전(최대 2)을 저장합니다. 예비 충전이 이후 실제 비용을 먼저 보전하므로 코어가 최대 충전 상태여도 증발하지 않습니다. 무료 기술에는 사용하지 않습니다.
+- 오버드라이브 시간·연쇄 할인·예비 충전은 저장/복원되고 종료 시 상태가 제거됩니다. 최초 발견 가속의 환급은 예비 충전으로 보전된 부분을 제외한 실제 코어 소비를 넘지 않습니다.
+
+## 세이브 이전
+
+| 구 능력 | 신규 능력 | 구 특성 → 신규 특성 |
+| --- | --- | --- |
+| AscendedForm | 성녀의 기도 | DIVINE_INTERVENTION/JUDGEMENT/FLASH → OVERFLOWING_GRACE/PURIFYING_GRACE/PRAYER_ECHO |
+| Trinity | 코어 오버드라이브 | BODY_FORM/MIND_FORM/SPIRIT_FORM → EXTENDED_OUTPUT/PROTOCOL_CHAIN/PILGRIMS_MIRACLE |
+| PowerOfMany | 파페사의 강림 | BEAMING_RAY/LIFE_LINK/STASIS → RESONANCE_COLLAPSE/FORCED_VIBRATION/JAMMER_RAMPAGE |
+
+특성 포인트와 HEROIC_ENERGY를 보존합니다. 구 능력 클래스와 enum은 역직렬화용으로 유지하고 선택 목록에서는 제외합니다. 구 형상 버프는 불러오기 때 정리하여 신규 능력에 구 형상 효과가 섞이지 않게 합니다.
+
+기존 PRIEST/PALADIN 전직과 1–3티어 이름 이전, 로컬 SANCTUARY_MEAL/BLESSED_MEAL/HAND_OF_SALVATION 별칭을 유지합니다. 구 SacramentReady 클래스는 읽기 전용 호환 표식으로 남겨 불러오기 시 제거합니다. 대기 중인 구 SatiatedSpellsTracker도 제거하며, 이미 시작한 회복과 기존 가속 환급 사용 여부는 보존합니다. 신규 저장을 이전 버전에서 여는 역방향 호환은 지원하지 않습니다.
+
+## 검증과 APK
 
 ```bash
 ./gradlew :core:rapunzelTest --no-daemon
 ./gradlew :android:assembleCloudTest --no-daemon
+apksigner verify --verbose android/build/outputs/apk/cloudTest/android-cloudTest.apk
 ```
 
-자동 회귀 검증: **29개 시나리오, 352개 검사 통과** (`:core:rapunzelTest`).
+회귀 테스트: **49개 시나리오, 598개 검사**. 기존 29개 시나리오를 새 음식·스택 규칙에 맞게 갱신하고 직접 마법·다중 패킷·무제한 스택 저장·실제 STR 출력·인챈트/상형문자 유지·신규 4티어·면역·메아리·예비 충전·이전·한국어/영어 설명을 검사합니다.
 
-Android 검증: 요청한 `./gradlew :android:assembleCloudTest --no-daemon` **성공**. `android/build/outputs/apk/cloudTest/android-cloudTest.apk` 생성 및 `apksigner verify` 통과.
+APK: `android/build/outputs/apk/cloudTest/android-cloudTest.apk`. `.cloudtest` ID와 `-INDEV-CLOUDTEST` 버전명, 별도 Cloud Test 이름을 유지합니다. release/debug와 workflow 설정은 이번 패치에서 변경하지 않습니다.
 
-자동 검증은 그래픽 문맥 없이 실제 공격/마법막대 사용/버프 틱/회복/세이브 복원, 코어 성공·실패 완료 경로, 비용·환급·공명, 프로토콜 표시명과 액티브 피해·밀치기 계산을 검사합니다. 렌더링과 터치 조작은 아래 플레이테스트로 별도 확인해야 합니다.
+## 플레이테스트
 
-## 남은 플레이테스트
+- 실제 Android UI에서 신규 세 능력 선택, 특성 투자, 조준·취소, 빠른 코어 프로토콜 조작.
+- 다수 적·아군이 있는 기도/강림에서 시각 효과, 밀치기 애니메이션·낭떠러지·보스 면역.
+- 메아리 대기 중 층 이동·아군 사망·저장/종료/재실행, 오버드라이브 중 실제 게임 재실행.
+- 기존 로컬 세이브와 구 Cleric 4티어 능력을 선택한 실제 세이브 로드.
+- 초중후반 출력과 무제한 반격 스택·오버드라이브 예비 충전의 체감 밸런스. 확정 수치는 변경하지 않았습니다.
 
-- 새 계정 캐릭터 선택에서 1·2티어 설명 표시, 실제 레벨별 특성 투자와 전직 선택 확인.
-- 근접·투척 일반 공격, 실패한 첫 공격, 재밍 적용/연장과 버프 표시, 적 최초 목격 및 15턴 대기시간 체감 확인.
-- 음식→준비→성공 프로토콜 연계, 취소·실패·대상 소실 시 보존, 응급 복구 및 코어/다른 유물의 양방향 공명과 실제 충전 표시 확인. 가속당 최초 0/1/2 충전 프로토콜 환급 및 저장 후 재사용 방지 확인.
-- 유령·대지 수호자·감시탑·타락 아군의 자연/능동 회복과 자비 전달, 만피/사망 아군 제외, 반격 스택과 보호막 소멸 확인.
-- 파페사 코어 메뉴·빠른 사용·타겟 선택·애니메이션 확인. 벽/문/대형 적/보스/함정/구덩이/속박/이동 불가 적에서 돌진과 충돌 확인.
-- 진동 지팡이 충격파의 벽 차단·아군 제외·마법 저항, 저주 코어 및 마법 면역 시 사용 제한 확인.
-- 실제 기존 Priest/Paladin 저장 파일을 복사해 전직·특성·빠른 주문·업적 마이그레이션 확인. 이동·회복·재밍·대기시간 도중 종료/재개 확인.
-- 액티브 임시 수치와 계속 회복할 때의 보호막 증가량을 실전에서 조정할 필요가 있는지 확인.
+## 변경 파일
 
-## 변경 파일 전체
-
-- `.github/workflows/build-apk.yml`
-- `android/build.gradle`
-- `core/build.gradle`
 - `core/src/main/assets/messages/actors/actors.properties`
 - `core/src/main/assets/messages/actors/actors_ko.properties`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/Badges.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/Char.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/blobs/WaterOfHealth.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/buffs/ArtifactRecharge.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/buffs/Healing.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/buffs/MagicalSleep.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/buffs/Regeneration.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/buffs/ShieldBuff.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/buffs/WellFed.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/Hero.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/HeroClass.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/HeroSubClass.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/RapunzelTalents.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/Talent.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/abilities/duelist/Challenge.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/abilities/duelist/ElementalStrike.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/abilities/mage/ElementalBlast.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/spells/BlessSpell.java`
+- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/abilities/rapunzel/CoreOverdrive.java`
+- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/abilities/rapunzel/PapessDescent.java`
+- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/abilities/rapunzel/SaintPrayer.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/spells/ClericSpell.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/spells/EmergencyRepair.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/spells/GuidingLight.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/spells/HallowedGround.java`
+- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/spells/HolyLance.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/spells/HolyWard.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/spells/HolyWeapon.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/spells/LayOnHands.java`
+- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/spells/Judgement.java`
+- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/spells/Radiance.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/spells/ShieldRush.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/spells/SpiritForm.java`
+- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/spells/Sunray.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/spells/VibratingStaff.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/mobs/Bat.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/mobs/CrystalGuardian.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/mobs/Mob.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/mobs/Necromancer.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/mobs/RotLasher.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/mobs/Succubus.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/mobs/YogFist.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/Dewdrop.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/Item.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/armor/curses/Metabolism.java`
+- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/actors/mobs/Skeleton.java`
+- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/armor/Armor.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/armor/glyphs/AntiMagic.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/artifacts/AlchemistsToolkit.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/artifacts/Artifact.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/artifacts/ChaliceOfBlood.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/artifacts/CloakOfShadows.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/artifacts/DriedRose.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/artifacts/EtherealChains.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/artifacts/HolyTome.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/artifacts/HornOfPlenty.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/artifacts/MasterThievesArmband.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/artifacts/SandalsOfNature.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/artifacts/SkeletonKey.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/artifacts/TalismanOfForesight.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/artifacts/TimekeepersHourglass.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/artifacts/UnstableSpellbook.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/food/FrozenCarpaccio.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/food/Pasty.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/food/PhantomMeat.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/food/SupplyRation.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/potions/elixirs/ElixirOfAquaticRejuvenation.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/remains/TornPage.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/wands/CursedWand.java`
 - `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/wands/Wand.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/wands/WandOfLivingEarth.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/wands/WandOfTransfusion.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/wands/WandOfWarding.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/weapon/enchantments/Vampiric.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/plants/Sungrass.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/TalentsPane.java`
-- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndHeroInfo.java`
+- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/weapon/Weapon.java`
+- `core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/items/weapon/melee/MeleeWeapon.java`
 - `core/src/test/java/com/shatteredpixel/shatteredpixeldungeon/actors/hero/RapunzelTalentTest.java`
 - `docs/rapunzel-t3-test.md`

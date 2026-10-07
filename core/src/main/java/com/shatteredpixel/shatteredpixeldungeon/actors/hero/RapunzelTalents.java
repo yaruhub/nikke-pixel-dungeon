@@ -26,6 +26,104 @@ import com.watabou.utils.Random;
 public final class RapunzelTalents {
     private RapunzelTalents() {}
 
+    public static int coreOutput(Hero hero, HolyTome tome) {
+        return Math.max(0, Math.floorDiv(hero.lvl, 4) + Math.floorDiv(hero.STR() - 10, 2)
+                + (tome == null ? 0 : Math.floorDiv(tome.level(), 2)));
+    }
+    public static int coreOutput(Hero hero) { return coreOutput(hero, hero.belongings.getItem(HolyTome.class)); }
+    public static int fireSupport(Hero hero) { return 2 + coreOutput(hero) / 2; }
+    public static int wardReduction(Hero hero) { return 1 + coreOutput(hero) / 3; }
+    public static com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.ArmorAbility migrateAbility(
+            com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.ArmorAbility ability) {
+        if (ability instanceof com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.cleric.AscendedForm)
+            return new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer();
+        if (ability instanceof com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.cleric.Trinity)
+            return new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.CoreOverdrive();
+        if (ability instanceof com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.cleric.PowerOfMany)
+            return new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent();
+        return ability;
+    }
+    private static DirectAttack currentAttack;
+    /** Synchronous attack scope. Delayed blobs/status effects cannot retain it. */
+    public static final class DirectAttack implements AutoCloseable {
+        private final DirectAttack previous;
+        private final Hero hero;
+        private boolean magic;
+        private final java.util.HashSet<Integer> rolled = new java.util.HashSet<>();
+        private final java.util.HashSet<Integer> initiallyJammed = new java.util.HashSet<>();
+        private DirectAttack(Hero hero, boolean magic) {
+            this.hero = hero; this.magic = magic; previous = currentAttack; currentAttack = this;
+            if (Dungeon.level != null) for (Char ch : Dungeon.level.mobs)
+                if (ch.buff(Jamming.class) != null) initiallyJammed.add(ch.id());
+        }
+        @Override public void close() { currentAttack = previous; }
+    }
+    public static DirectAttack directAttack(Hero hero, boolean magic) { return new DirectAttack(hero, magic); }
+    /** Carry a cast's roll ledger across a visual callback without leaving an active damage scope. */
+    public static DirectAttack captureDirectAttack(Hero hero) {
+        if (currentAttack != null && currentAttack.hero == hero) return currentAttack;
+        DirectAttack event = directAttack(hero, true);
+        event.close();
+        return event;
+    }
+    public static void resumeDirectAttack(DirectAttack event, Runnable action) {
+        DirectAttack previous = currentAttack;
+        boolean previousMagic = event.magic;
+        currentAttack = event;
+        event.magic = true;
+        try { action.run(); }
+        finally { event.magic = previousMagic; currentAttack = previous; }
+    }
+    private static void pulse(Hero hero, Char enemy) {
+        if (hero.heroClass != HeroClass.CLERIC || enemy.alignment != Char.Alignment.ENEMY || !hero.hasTalent(Talent.JAMMING_PULSE)) return;
+        if (currentAttack != null && !currentAttack.rolled.add(enemy.id())) return;
+        if (Random.Float() < pulseChance(hero)) Buff.prolong(enemy, Jamming.class, pulseDuration(hero));
+    }
+    public static int directPacket(Char enemy, int damage, Object source) {
+        DirectAttack event = currentAttack;
+        // Only explicit immediate spell/wand packets; DOTs, traps, knockback/environment are excluded.
+        if (event == null || event.hero != Dungeon.hero || event.hero.heroClass != HeroClass.CLERIC || enemy.alignment != Char.Alignment.ENEMY
+                || !(source == event.hero || source instanceof com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand
+                || source instanceof com.shatteredpixel.shatteredpixeldungeon.items.weapon.Weapon.Enchantment
+                || source instanceof com.shatteredpixel.shatteredpixeldungeon.items.wands.CursedWand
+                || source instanceof com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.ClericSpell
+                || source instanceof com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent
+                || source instanceof com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent.Collision)) return damage;
+        Jamming jam = enemy.buff(Jamming.class);
+        if ((event.magic || source instanceof com.shatteredpixel.shatteredpixeldungeon.items.weapon.Weapon.Enchantment || source instanceof com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.HolyWeapon) && jam != null && jam.magicVulnerability && event.initiallyJammed.contains(enemy.id())) damage = Math.round(damage * 1.1f);
+        pulse(event.hero, enemy);
+        return damage;
+    }
+    public static void magicDamage(Hero hero, Char enemy, int damage, Object source, boolean guaranteed) {
+        directDamage(hero, enemy, damage, source, true, guaranteed);
+    }
+    public static void directDamage(Hero hero, Char enemy, int damage, Object source, boolean magic, boolean guaranteed) {
+        boolean ownsEvent = currentAttack == null || currentAttack.hero != hero;
+        DirectAttack event = ownsEvent ? directAttack(hero, magic) : currentAttack;
+        boolean previousMagic = event.magic;
+        event.magic |= magic;
+        try {
+            if (guaranteed) event.rolled.add(enemy.id());
+            enemy.damage(damage, source);
+        } finally {
+            event.magic = previousMagic;
+            if (ownsEvent) event.close();
+        }
+    }
+    public static float protocolCost(Hero hero, float base) {
+        CoreOverdriveState od = hero.buff(CoreOverdriveState.class);
+        return od == null ? base : Math.max(0, base * 0.5f - od.chain);
+    }
+    public static class ProtocolHaste extends FlavourBuff { { type = buffType.POSITIVE; } @Override public int icon() { return BuffIndicator.HASTE; } }
+    public static class CoreOverdriveState extends FlavourBuff {
+        public float chain, reserve;
+        public void resetDuration(float turns) { postpone(turns); }
+        { type = buffType.POSITIVE; }
+        @Override public int icon() { return BuffIndicator.RECHARGING; }
+        @Override public void storeInBundle(Bundle b) { super.storeInBundle(b); b.put("chain", chain); b.put("reserve", reserve); }
+        @Override public void restoreFromBundle(Bundle b) { super.restoreFromBundle(b); chain = Math.max(0, Math.min(1, b.getFloat("chain"))); reserve = Math.max(0, Math.min(2, b.getFloat("reserve"))); }
+    }
+
     public static String migrateTalent(Hero hero, String name) {
         if (hero.heroClass != HeroClass.CLERIC) return name;
         switch (name) {
@@ -49,6 +147,15 @@ public final class RapunzelTalents {
             case "LAY_ON_HANDS": return "VIBRATING_STAFF";
             case "AURA_OF_PROTECTION": return "SHIELD_RUSH";
             case "WALL_OF_LIGHT": return "RESONANT_OVERLOAD";
+            case "DIVINE_INTERVENTION": return "OVERFLOWING_GRACE";
+            case "JUDGEMENT": return "PURIFYING_GRACE";
+            case "FLASH": return "PRAYER_ECHO";
+            case "BODY_FORM": return "EXTENDED_OUTPUT";
+            case "MIND_FORM": return "PROTOCOL_CHAIN";
+            case "SPIRIT_FORM": return "PILGRIMS_MIRACLE";
+            case "BEAMING_RAY": return "RESONANCE_COLLAPSE";
+            case "LIFE_LINK": return "FORCED_VIBRATION";
+            case "STASIS": return "JAMMER_RAMPAGE";
             default: return name;
         }
     }
@@ -62,10 +169,11 @@ public final class RapunzelTalents {
     }
 
     public static void onFoodEaten(Hero hero) {
-        if (hero.hasTalent(Talent.SACRAMENT_VEIL) || hero.hasTalent(Talent.BLESSED_SACRAMENT)) {
-            // One shared, persistent preparation; another meal refreshes rather than stacks it.
-            Buff.affect(hero, SacramentReady.class);
-        }
+        Buff.detach(hero, SacramentReady.class);
+        int points = hero.pointsInTalent(Talent.SACRAMENT_VEIL);
+        if (points > 0) giveBarrier(hero, 1 + 2 * points);
+        points = hero.pointsInTalent(Talent.BLESSED_SACRAMENT);
+        if (points > 0) Buff.affect(hero, BlessedSacrament.class).reset(1 + points);
     }
 
     /** Only called after a protocol actually completes and its charge has been spent. */
@@ -73,10 +181,12 @@ public final class RapunzelTalents {
         SacramentReady ready = hero.buff(SacramentReady.class);
         if (ready != null) {
             ready.detach();
-            int points = hero.pointsInTalent(Talent.SACRAMENT_VEIL);
-            if (points > 0) giveBarrier(hero, 1 + 2 * points);
-            points = hero.pointsInTalent(Talent.BLESSED_SACRAMENT);
-            if (points > 0) Buff.affect(hero, BlessedSacrament.class).reset(1 + points);
+
+        }
+        CoreOverdriveState overdrive = hero.buff(CoreOverdriveState.class);
+        if (overdrive != null) {
+            overdrive.chain = hero.pointsInTalent(Talent.PROTOCOL_CHAIN) * 0.25f;
+            Buff.prolong(hero, ProtocolHaste.class, 1f);
         }
         PilgrimHaste haste = hero.buff(PilgrimHaste.class);
         if (haste != null && !haste.refundUsed && hero.hasTalent(Talent.HERE_I_GO)) {
@@ -100,10 +210,8 @@ public final class RapunzelTalents {
         }
     }
 
-    public static class SacramentReady extends Buff {
-        { type = buffType.POSITIVE; }
-        @Override public int icon() { return BuffIndicator.SPELL_FOOD; }
-    }
+    /** Kept solely to decode old bundles. It has no gameplay effect and is discarded on load. */
+    public static class SacramentReady extends Buff {}
 
     // Permanent markers live on the actual enemy, not on a transient visible-enemy list.
     public static class PilgrimAttacked extends Buff {}
@@ -143,10 +251,7 @@ public final class RapunzelTalents {
         // One attackProc per attack; also safe against enchantments invoking a secondary proc.
         hero.rapunzelFirstAttackTarget = -1;
         hero.rapunzelCounterDamage = 0;
-        int pulse = hero.pointsInTalent(Talent.JAMMING_PULSE);
-        if (pulse > 0 && Random.Float() < pulseChance(hero)) {
-            Buff.prolong(enemy, Jamming.class, pulseDuration(hero));
-        }
+        pulse(hero, enemy);
         return damage;
     }
 
@@ -268,11 +373,21 @@ public final class RapunzelTalents {
     }
 
     public static class Jamming extends FlavourBuff {
+        public boolean rampageAccuracy, magicVulnerability;
+        @Override public void storeInBundle(Bundle b) { super.storeInBundle(b); b.put("rampage_accuracy", rampageAccuracy); b.put("magic_vulnerability", magicVulnerability); }
+        @Override public void restoreFromBundle(Bundle b) { super.restoreFromBundle(b); rampageAccuracy = b.getBoolean("rampage_accuracy"); magicVulnerability = b.getBoolean("magic_vulnerability"); }
         { type = buffType.NEGATIVE; }
         public float accuracyMultiplier() {
-            return Dungeon.hero != null && Dungeon.hero.pointsInTalent(Talent.JAMMER_OPTIMIZATION) >= 2 ? 0.75f : 0.8f;
+            return (Dungeon.hero != null && Dungeon.hero.pointsInTalent(Talent.JAMMER_OPTIMIZATION) >= 2 ? 0.75f : 0.8f) - (rampageAccuracy ? 0.05f : 0f);
         }
         public void extend(float turns) { spend(turns); }
+        public void minimumDuration(float turns) { postpone(turns); }
+        public boolean forceAttach(Char ch) {
+            if (Char.hasProp(ch, Char.Property.BOSS) || ch.isInvulnerable(getClass())) return false;
+            target = ch;
+            if (ch.add(this)) { if (ch.sprite != null) fx(true); return true; }
+            target = null; return false;
+        }
         @Override public int icon() { return BuffIndicator.HEX; }
         @Override public void tintIcon(Image icon) { icon.hardlight(0.75f, 0.3f, 1f); }
     }
@@ -323,12 +438,12 @@ public final class RapunzelTalents {
     public static class GraceCounter extends Buff {
         private int stacks;
         { type = buffType.POSITIVE; }
-        public void addStack() { stacks = Math.min(2, stacks + 1); }
+        public void addStack() { stacks++; }
         public int stacks() { return stacks; }
         public int consume() { int result = stacks; detach(); return result; }
         @Override public int icon() { return BuffIndicator.WEAPON; }
         @Override public String iconTextDisplay() { return Integer.toString(stacks); }
         @Override public void storeInBundle(Bundle bundle) { super.storeInBundle(bundle); bundle.put("stacks", stacks); }
-        @Override public void restoreFromBundle(Bundle bundle) { super.restoreFromBundle(bundle); stacks = Math.min(2, bundle.getInt("stacks")); }
+        @Override public void restoreFromBundle(Bundle bundle) { super.restoreFromBundle(bundle); stacks = Math.max(0, bundle.getInt("stacks")); }
     }
 }

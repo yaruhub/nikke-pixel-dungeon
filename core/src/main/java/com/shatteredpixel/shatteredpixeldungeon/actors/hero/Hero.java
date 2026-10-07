@@ -343,9 +343,15 @@ public class Hero extends Char {
 		subClass = bundle.getEnum( SUBCLASS, HeroSubClass.class );
 		if (heroClass == HeroClass.CLERIC) subClass = subClass.rapunzelMigration();
 		armorAbility = (ArmorAbility)bundle.get( ABILITY );
+        if (heroClass == HeroClass.CLERIC) {
+            armorAbility = RapunzelTalents.migrateAbility(armorAbility);
+            Buff.detach(this, com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.cleric.AscendedForm.AscendBuff.class);
+            Buff.detach(this, com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.BodyForm.BodyFormBuff.class);
+            Buff.detach(this, com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.SpiritForm.SpiritFormBuff.class);
+        }
+        Buff.detach(this, RapunzelTalents.SacramentReady.class);
 		Talent.restoreTalentsFromBundle( bundle, this );
         if (heroClass == HeroClass.CLERIC && buff(Talent.SatiatedSpellsTracker.class) != null) {
-            RapunzelTalents.onFoodEaten(this);
             buff(Talent.SatiatedSpellsTracker.class).detach();
         }
 		
@@ -507,6 +513,7 @@ public class Hero extends Char {
 	public boolean attack(Char enemy, float dmgMulti, float dmgBonus, float accMulti) {
 		int previousTarget = rapunzelFirstAttackTarget;
 		int previousCounter = rapunzelCounterDamage;
+		RapunzelTalents.DirectAttack directEvent = RapunzelTalents.directAttack(this, false);
 		boolean previousAttack = rapunzelAttackInProgress;
 		rapunzelAttackInProgress = true;
 		rapunzelFirstAttackTarget = -1;
@@ -526,6 +533,7 @@ public class Hero extends Char {
 			rapunzelFirstAttackTarget = previousTarget;
 			rapunzelCounterDamage = previousCounter;
 			rapunzelAttackInProgress = previousAttack;
+            directEvent.close();
 		}
 	}
 	@Override
@@ -1563,8 +1571,8 @@ public class Hero extends Char {
 				damage = buff(BodyForm.BodyFormBuff.class).enchant().proc(new WornShortsword(), this, enemy, damage);
 			}
 			if (enemy.isAlive() && buff(HolyWeapon.HolyWepBuff.class) != null) {
-				int dmg = subClass == HeroSubClass.PALADIN ? 6 : 2;
-				enemy.damage(Math.round(dmg * Weapon.Enchantment.genericProcChanceMultiplier(this)), HolyWeapon.INSTANCE);
+				int dmg = heroClass == HeroClass.CLERIC ? RapunzelTalents.fireSupport(this) : subClass == HeroSubClass.PALADIN ? 6 : 2;
+				enemy.damage(heroClass == HeroClass.CLERIC ? dmg : Math.round(dmg * Weapon.Enchantment.genericProcChanceMultiplier(this)), HolyWeapon.INSTANCE);
 			}
 			if (enemy.isAlive() && buff(Smite.SmiteTracker.class) != null) {
 				enemy.damage(Smite.bonusDmg(this, enemy), Smite.INSTANCE);
@@ -1620,8 +1628,8 @@ public class Hero extends Char {
 				damage = buff(BodyForm.BodyFormBuff.class).glyph().proc(new ClothArmor(), enemy, this, damage);
 			}
 			if (buff(HolyWard.HolyArmBuff.class) != null){
-				int blocking = subClass == HeroSubClass.PALADIN ? 3 : 1;
-				damage -= Math.round(blocking * Armor.Glyph.genericProcChanceMultiplier(enemy));
+				int blocking = heroClass == HeroClass.CLERIC ? RapunzelTalents.wardReduction(this) : subClass == HeroSubClass.PALADIN ? 3 : 1;
+				damage = Math.max(0, damage - (heroClass == HeroClass.CLERIC ? blocking : Math.round(blocking * Armor.Glyph.genericProcChanceMultiplier(enemy))));
 			}
 		}
 

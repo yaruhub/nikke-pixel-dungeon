@@ -775,6 +775,7 @@ public abstract class Char extends Actor {
 		if ( buff( Cripple.class ) != null ) speed /= 2f;
 		if ( buff( Stamina.class ) != null) speed *= 1.5f;
 		if (buff(com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents.PilgrimHaste.class) != null) speed *= 1.5f;
+		if (buff(com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents.ProtocolHaste.class) != null) speed *= 1.5f;
 		if ( buff( Adrenaline.class ) != null) speed *= 2f;
 		if ( buff( Haste.class ) != null) speed *= 3f;
 		if ( buff( Dread.class ) != null) speed *= 2f;
@@ -847,7 +848,8 @@ public abstract class Char extends Actor {
 			return;
 		}
 
-		if (!(src instanceof LifeLink || src instanceof Hunger) && buff(LifeLink.class) != null){
+        dmg = com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents.directPacket(this, dmg, src);
+        if (!(src instanceof LifeLink || src instanceof Hunger) && buff(LifeLink.class) != null){
 			HashSet<LifeLink> links = buffs(LifeLink.class);
 			for (LifeLink link : links.toArray(new LifeLink[0])){
 				if (Actor.findById(link.object) == null){

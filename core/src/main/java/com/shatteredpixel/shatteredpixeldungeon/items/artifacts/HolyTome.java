@@ -21,6 +21,8 @@
 
 package com.shatteredpixel.shatteredpixeldungeon.items.artifacts;
 
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents;
+
 import com.shatteredpixel.shatteredpixeldungeon.Dungeon;
 import com.shatteredpixel.shatteredpixeldungeon.actors.Char;
 import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.MagicImmune;
@@ -147,11 +149,15 @@ public class HolyTome extends Artifact {
 	public boolean canCast( Hero hero, ClericSpell spell ){
 		return (isEquipped(hero) || (Dungeon.hero.hasTalent(Talent.LIGHT_READING) && hero.belongings.contains(this)))
 				&& !cursed && hero.buff(MagicImmune.class) == null
-				&& charge >= spell.chargeUse(hero)
+				&& availableCharge() + (hero.buff(RapunzelTalents.CoreOverdriveState.class) == null ? 0 : hero.buff(RapunzelTalents.CoreOverdriveState.class).reserve) >= protocolCost(hero, spell)
 				&& spell.canCast(hero);
 	}
 
-	public float availableCharge() { return charge + partialCharge; }
+	public float protocolCost(Hero hero, ClericSpell spell) {
+        return RapunzelTalents.protocolCost(hero, spell.chargeUse(hero));
+    }
+    public void fillCharge() { directCharge(chargeCap); }
+    public float availableCharge() { return charge + partialCharge; }
 
 	public void spendCharge( float chargesSpent ){
 		partialCharge -= chargesSpent;
@@ -306,7 +312,7 @@ public class HolyTome extends Artifact {
 					if (!isEquipped(Dungeon.hero)){
 						chargeToGain *= 0.75f*Dungeon.hero.pointsInTalent(Talent.LIGHT_READING)/3f;
 					}
-					partialCharge += chargeToGain;
+					partialCharge += chargeToGain * (Dungeon.hero.buff(RapunzelTalents.CoreOverdriveState.class) != null ? 2f : 1f);
 				}
 
 				while (partialCharge >= 1) {

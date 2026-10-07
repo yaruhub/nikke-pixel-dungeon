@@ -21,6 +21,10 @@
 
 package com.shatteredpixel.shatteredpixeldungeon.actors.hero;
 
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.SaintPrayer;
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.PapessDescent;
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.rapunzel.CoreOverdrive;
+
 import com.shatteredpixel.shatteredpixeldungeon.Assets;
 import com.shatteredpixel.shatteredpixeldungeon.Badges;
 import com.shatteredpixel.shatteredpixeldungeon.Challenges;
@@ -289,7 +293,7 @@ public enum HeroClass {
 			case DUELIST:
 				return new ArmorAbility[]{new Challenge(), new ElementalStrike(), new Feint()};
 			case CLERIC:
-				return new ArmorAbility[]{new AscendedForm(), new Trinity(), new PowerOfMany()};
+				return new ArmorAbility[]{new SaintPrayer(), new PapessDescent(), new CoreOverdrive()};
 		}
 	}
 

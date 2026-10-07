@@ -21,6 +21,8 @@
 
 package com.shatteredpixel.shatteredpixeldungeon.items.wands;
 
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents;
+
 import com.shatteredpixel.shatteredpixeldungeon.Assets;
 import com.shatteredpixel.shatteredpixeldungeon.Badges;
 import com.shatteredpixel.shatteredpixeldungeon.Challenges;
@@ -122,12 +124,14 @@ public class CursedWand {
 	public static void cursedZap(final Item origin, final Char user, final Ballistica bolt, final Callback afterZap){
 
 		boolean positiveOnly = user == Dungeon.hero && Random.Float() < WondrousResin.positiveCurseEffectChance();
-		CursedEffect effect = randomValidEffect(origin, user, bolt, positiveOnly);
+        CursedEffect effect = randomValidEffect(origin, user, bolt, positiveOnly);
+        RapunzelTalents.DirectAttack event = user == Dungeon.hero ? RapunzelTalents.captureDirectAttack(Dungeon.hero) : null;
 
 		effect.FX(origin, user, bolt, new Callback() {
 			@Override
 			public void call() {
-				effect.effect(origin, user, bolt, positiveOnly);
+                if (event != null) RapunzelTalents.resumeDirectAttack(event, () -> effect.effect(origin, user, bolt, positiveOnly));
+                else effect.effect(origin, user, bolt, positiveOnly);
 				afterZap.call();
 			}
 		});
@@ -489,7 +493,11 @@ public class CursedWand {
 				toHeal.sprite.emitter().burst(Speck.factory(Speck.HEALING), 3);
 				toHeal.sprite.showStatusWithIcon( CharSprite.POSITIVE, Integer.toString(damage/2), FloatingText.HEALING );
 
-				toDamage.damage(damage, new CursedWand());
+				if (user == Dungeon.hero) {
+                    RapunzelTalents.magicDamage(Dungeon.hero, toDamage, damage, new CursedWand(), false);
+                } else {
+                    toDamage.damage(damage, new CursedWand());
+                }
 				toDamage.sprite.emitter().start(ShadowParticle.UP, 0.05f, 10);
 
 				if (toDamage == Dungeon.hero){

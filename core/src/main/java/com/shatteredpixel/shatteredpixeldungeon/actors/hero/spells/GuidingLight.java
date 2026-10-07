@@ -89,7 +89,7 @@ public class GuidingLight extends TargetedClericSpell {
 
                 Char ch = Actor.findChar(aim.collisionPos);
                 if (hero.heroClass == HeroClass.CLERIC) {
-                    if (!completeRapunzelHit(tome, hero, ch, Hero.heroDamageIntRange(2, 8))) {
+                    if (!completeRapunzelHit(tome, hero, ch, Hero.heroDamageIntRange(minimumDamage(hero, tome), maximumDamage(hero, tome)))) {
                         hero.spend(1f);
                         hero.next();
                         return;
@@ -115,6 +115,8 @@ public class GuidingLight extends TargetedClericSpell {
 		});
 	}
 
+    public static int minimumDamage(Hero hero, HolyTome tome) { return 2 + RapunzelTalents.coreOutput(hero, tome); }
+    public static int maximumDamage(Hero hero, HolyTome tome) { return 8 + RapunzelTalents.coreOutput(hero, tome); }
     public static boolean validRapunzelTarget(Hero hero, Char target) {
         return target != null && target.isAlive() && target.alignment == Char.Alignment.ENEMY
                 && hero.fieldOfView[target.pos];
@@ -134,12 +136,12 @@ public class GuidingLight extends TargetedClericSpell {
             damage = RapunzelTalents.jammerDamage(hero, target, damage);
             Buff.detach(target, Illuminated.class);
             Buff.detach(target, WasIlluminatedTracker.class);
-            target.damage(damage, INSTANCE);
+            RapunzelTalents.magicDamage(hero, target, damage, INSTANCE, true);
             if (target.isAlive() && target.alignment == Char.Alignment.ENEMY && hero.hasTalent(Talent.JAMMING_PULSE)) {
                 Buff.prolong(target, RapunzelTalents.Jamming.class, RapunzelTalents.pulseDuration(hero));
             }
         } else {
-            target.damage(damage, INSTANCE);
+            RapunzelTalents.magicDamage(hero, target, damage, INSTANCE, true);
             if (target.isAlive()) {
                 Buff.affect(target, Illuminated.class);
                 Buff.affect(target, WasIlluminatedTracker.class);
@@ -158,11 +160,11 @@ public class GuidingLight extends TargetedClericSpell {
 	}
 
 	public String desc(){
-		String desc = Messages.get(this, rapunzelBasicProtocol() ? "desc_rapunzel" : "desc");
+		String desc = rapunzelBasicProtocol() ? Messages.get(this, "desc_rapunzel", 2 + RapunzelTalents.coreOutput(Dungeon.hero), 8 + RapunzelTalents.coreOutput(Dungeon.hero)) : Messages.get(this, "desc");
 		if (Dungeon.hero.subClass == HeroSubClass.PRIEST){
 			desc += "\n\n" + Messages.get(this, "desc_priest");
 		}
-		return desc + "\n\n" + Messages.get(this, "charge_cost", (int)chargeUse(Dungeon.hero));
+		return desc + "\n\n" + Messages.get(this, "charge_cost", com.shatteredpixel.shatteredpixeldungeon.actors.hero.RapunzelTalents.protocolCost(Dungeon.hero, chargeUse(Dungeon.hero)));
 	}
 
 	public static class GuidingLightPriestCooldown extends FlavourBuff {
